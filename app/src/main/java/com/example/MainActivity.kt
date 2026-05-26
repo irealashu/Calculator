@@ -202,14 +202,25 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                             textAlign = TextAlign.End
                         )
                     } else if (preview.isNotEmpty()) {
-                        Text(
-                            text = preview,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Light,
-                            color = previewResultColor,
-                            textAlign = TextAlign.End,
-                            maxLines = 1
-                        )
+                        val previewScrollState = rememberScrollState()
+                        LaunchedEffect(preview) {
+                            previewScrollState.scrollTo(previewScrollState.maxValue)
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(previewScrollState),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            Text(
+                                text = preview,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Light,
+                                color = previewResultColor,
+                                textAlign = TextAlign.End,
+                                maxLines = 1
+                            )
+                        }
                     } else {
                         Text(
                             text = "",

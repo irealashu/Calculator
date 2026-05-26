@@ -115,6 +115,29 @@ class CalculatorParser(
             while ((ch >= '0'.code && ch <= '9'.code) || ch == '.'.code) {
                 nextChar()
             }
+            if (ch == 'e'.code || ch == 'E'.code) {
+                val nextPos = pos + 1
+                val nextCh = if (nextPos < expr.length) expr[nextPos] else null
+                val nextCh2 = if (pos + 2 < expr.length) expr[pos + 2] else null
+                
+                val isExp = if (nextCh != null && nextCh.isDigit()) {
+                    true
+                } else if (nextCh != null && (nextCh == '-' || nextCh == '+') && nextCh2 != null && nextCh2.isDigit()) {
+                    true
+                } else {
+                    false
+                }
+                
+                if (isExp) {
+                    nextChar() // consume 'e' or 'E'
+                    if (ch == '-'.code || ch == '+'.code) {
+                        nextChar() // consume sign
+                    }
+                    while (ch >= '0'.code && ch <= '9'.code) {
+                        nextChar() // consume digits
+                    }
+                }
+            }
             val numStr = expr.substring(startPos, this.pos)
             val d = numStr.toDoubleOrNull() ?: 0.0
             x = BigVal(d)

@@ -21,5 +21,24 @@ class ExampleUnitTest {
     val formatted3 = result3.toFormattedString()
     assertEquals("4.28125×10^369693099", formatted3)
   }
+
+  @Test
+  fun testSuperLargeExponentiation() {
+    val expr4 = "9^9^9^9^9"
+    val result4 = CalculatorParser(expr4).parse()
+    val formatted4 = result4.toFormattedString()
+    println("SUPER_LARGE_RESULT: $formatted4")
+  }
+
+  @Test
+  fun testScientificParser() {
+    val expr = "6.62607e-34 * 10"
+    val result = CalculatorParser(expr).parse()
+    assertEquals("6.62607×10^(-33)", result.toFormattedString())
+
+    val expr2 = "1.60218e-19 * 1e4"
+    val result2 = CalculatorParser(expr2).parse()
+    assertEquals("1.60218×10^(-15)", result2.toFormattedString())
+  }
 }
 
