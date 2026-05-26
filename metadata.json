@@ -1,5 +1,5 @@
 {
-  "name": "Calculator",
+  "name": "IRA05-26",
   "description": "A visually polished, responsive, and tactile Material 3 calculator.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

@@ -43,8 +43,54 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    // Scientific angle and base modes matching TI-36X Pro
+    private val _angleMode = MutableStateFlow("DEG")
+    val angleMode: StateFlow<String> = _angleMode.asStateFlow()
+
+    private val _baseMode = MutableStateFlow("DEC")
+    val baseMode: StateFlow<String> = _baseMode.asStateFlow()
+
+    // 8 Memory Stored Variables: x, y, z, t, a, b, c, d
+    private val _variables = MutableStateFlow<Map<String, Double>>(
+        mapOf(
+            "x" to 0.0, "y" to 0.0, "z" to 0.0, "t" to 0.0,
+            "a" to 0.0, "b" to 0.0, "c" to 0.0, "d" to 0.0
+        )
+    )
+    val variables: StateFlow<Map<String, Double>> = _variables.asStateFlow()
+
     fun toggleScientific() {
         _isScientificExpanded.value = !_isScientificExpanded.value
+    }
+
+    fun toggleAngleMode() {
+        _angleMode.value = if (_angleMode.value == "DEG") "RAD" else "DEG"
+        updatePreview()
+    }
+
+    fun setBaseMode(mode: String) {
+        _baseMode.value = mode
+        // Auto convert expression or clear if base is not DEC
+        if (mode != "DEC") {
+            _expression.value = ""
+            _previewResult.value = ""
+        }
+        updatePreview()
+    }
+
+    fun storeVariable(name: String, valueStr: String) {
+        val cleanName = name.lowercase()
+        val parsedVal = valueStr.toDoubleOrNull() ?: _previewResult.value.toDoubleOrNull() ?: _expression.value.toDoubleOrNull() ?: 0.0
+        val currentVars = _variables.value.toMutableMap()
+        currentVars[cleanName] = parsedVal
+        _variables.value = currentVars
+    }
+
+    fun clearVariables() {
+        _variables.value = mapOf(
+            "x" to 0.0, "y" to 0.0, "z" to 0.0, "t" to 0.0,
+            "a" to 0.0, "b" to 0.0, "c" to 0.0, "d" to 0.0
+        )
     }
 
     fun onDigitClick(digit: String) {
@@ -56,7 +102,6 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     fun onOperatorClick(operator: String) {
         _errorMessage.value = null
         val current = _expression.value
-        // If empty and operator is minus, allow unary minus
         if (current.isEmpty() && (operator == "-" || operator == "−")) {
             _expression.value = "-"
             return
@@ -64,7 +109,6 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         
         if (current.isNotEmpty()) {
             val lastChar = current.last()
-            // If last char is already an operator, replace it
             if (isOperatorSymbol(lastChar)) {
                 _expression.value = current.dropLast(1) + operator
             } else {
@@ -115,17 +159,26 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         _errorMessage.value = null
         val current = _expression.value
         if (current.isNotEmpty()) {
-            // If deleting a scientific function string e.g. "sin(", "cos(", "tan(", "log(", "ln("
-            if (current.endsWith("sin(")) {
-                _expression.value = current.dropLast(4)
-            } else if (current.endsWith("cos(") || current.endsWith("tan(") || current.endsWith("log(")) {
-                _expression.value = current.dropLast(4)
-            } else if (current.endsWith("ln(")) {
-                _expression.value = current.dropLast(3)
-            } else if (current.endsWith("sqrt(")) {
-                _expression.value = current.dropLast(5)
-            } else {
-                _expression.value = current.dropLast(1)
+            // Check list of longer suffixes first
+            val suffixes = listOf(
+                "asin(", "acos(", "atan(", "sinh(", "cosh(", "tanh(", "asinh(", "acosh(", "atanh(",
+                "sqrt(", "cbrt(", "iPart(", "fPart(", "min(", "max(", "mod(", "lcm(", "gcd(", "nPr(", "nCr(",
+                "sin(", "cos(", "tan(", "log(", "ln(", "abs(", "int("
+            )
+            var matched = false
+            for (suffix in suffixes) {
+                if (current.endsWith(suffix)) {
+                    _expression.value = current.dropLast(suffix.length)
+                    matched = true
+                    break
+                }
+            }
+            if (!matched) {
+                if (current.endsWith("nCr") || current.endsWith("nPr")) {
+                    _expression.value = current.dropLast(3)
+                } else {
+                    _expression.value = current.dropLast(1)
+                }
             }
         }
         updatePreview()
@@ -149,7 +202,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         if (currentExpr.isBlank()) return
 
         try {
-            val compiled = CalculatorParser(currentExpr).parse()
+            val compiled = CalculatorParser(currentExpr, _angleMode.value, _variables.value).parse()
             val formatted = formatResult(compiled)
             
             // Save to database
@@ -161,7 +214,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             _previewResult.value = ""
             _errorMessage.value = null
         } catch (e: Exception) {
-            _errorMessage.value = e.message ?: "Invalid Expression"
+            _errorMessage.value = e.message ?: "Format Error"
         }
     }
 
@@ -184,10 +237,9 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             return
         }
         try {
-            val compiled = CalculatorParser(currentExpr).parse()
+            val compiled = CalculatorParser(currentExpr, _angleMode.value, _variables.value).parse()
             _previewResult.value = formatResult(compiled)
         } catch (e: Exception) {
-            // Keep preview silent as typing might be incomplete
             _previewResult.value = ""
         }
     }

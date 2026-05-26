@@ -19,7 +19,6 @@ class ExampleUnitTest {
     val expr3 = "9^9^9"
     val result3 = CalculatorParser(expr3).parse()
     val formatted3 = result3.toFormattedString()
-    java.io.File("/app/src/test/java/com/example/test_output.txt").writeText(formatted3)
     assertEquals("4.28125×10^369693099", formatted3)
   }
 }

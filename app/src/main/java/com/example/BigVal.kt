@@ -34,7 +34,7 @@ class BigVal {
             }
             
             // Extract fractional part of exponent to keep the exponent as a clean integer if flat
-            if (tempE.exponent == null && tempE.toDouble().isFinite()) {
+            if (tempE.toDouble().isFinite()) {
                 val eVal = tempE.toDouble()
                 if (eVal == 0.0) {
                     this.mantissa = tempM
@@ -181,6 +181,99 @@ class BigVal {
     fun cosVal(): BigVal = BigVal(cos(toDouble()))
     fun tanVal(): BigVal = BigVal(tan(toDouble()))
     
+    fun sinhVal(): BigVal = BigVal(sinh(toDouble()))
+    fun coshVal(): BigVal = BigVal(cosh(toDouble()))
+    fun tanhVal(): BigVal = BigVal(tanh(toDouble()))
+    fun asinhVal(): BigVal = BigVal(ln(toDouble() + sqrt(toDouble().pow(2) + 1.0)))
+    fun acoshVal(): BigVal = BigVal(ln(toDouble() + sqrt(toDouble().pow(2) - 1.0)))
+    fun atanhVal(): BigVal = BigVal(0.5 * ln((1.0 + toDouble()) / (1.0 - toDouble())))
+
+    fun absVal(): BigVal = BigVal(abs(toDouble()))
+    fun cbrtVal(): BigVal = BigVal(Math.cbrt(toDouble()))
+    
+    fun roundVal(decimals: Int): BigVal {
+        val d = toDouble()
+        if (d.isInfinite() || d.isNaN()) return this
+        val factor = 10.0.pow(decimals)
+        return BigVal(round(d * factor) / factor)
+    }
+
+    fun iPartVal(): BigVal {
+        val d = toDouble()
+        return BigVal(if (d >= 0) floor(d) else ceil(d))
+    }
+
+    fun fPartVal(): BigVal {
+        val d = toDouble()
+        return BigVal(d - (if (d >= 0) floor(d) else ceil(d)))
+    }
+
+    fun intVal(): BigVal {
+        return BigVal(floor(toDouble()))
+    }
+
+    fun modVal(other: BigVal): BigVal {
+        return BigVal(toDouble() % other.toDouble())
+    }
+
+    fun lcmVal(other: BigVal): BigVal {
+        val a = abs(toDouble().roundToLong())
+        val b = abs(other.toDouble().roundToLong())
+        if (a == 0L || b == 0L) return BigVal(0.0)
+        return BigVal((a / gcdLong(a, b) * b).toDouble())
+    }
+
+    fun gcdVal(other: BigVal): BigVal {
+        val a = abs(toDouble().roundToLong())
+        val b = abs(other.toDouble().roundToLong())
+        return BigVal(gcdLong(a, b).toDouble())
+    }
+
+    private fun gcdLong(x: Long, y: Long): Long {
+        var a = x
+        var b = y
+        while (b != 0L) {
+            val temp = b
+            b = a % b
+            a = temp
+        }
+        return a
+    }
+
+    fun factorial(): BigVal {
+        val d = toDouble()
+        if (d < 0.0 || d > 100.0) throw IllegalArgumentException("Domain error")
+        val n = d.roundToInt()
+        var res = BigVal(1.0)
+        for (i in 2..n) {
+            res *= BigVal(i.toDouble())
+        }
+        return res
+    }
+
+    fun nPr(rVal: BigVal): BigVal {
+        val n = this.toDouble().roundToInt()
+        val r = rVal.toDouble().roundToInt()
+        if (n < 0 || r < 0 || r > n || n > 9999) throw IllegalArgumentException("Domain error")
+        var res = BigVal(1.0)
+        for (i in (n - r + 1)..n) {
+            res *= BigVal(i.toDouble())
+        }
+        return res
+    }
+
+    fun nCr(rVal: BigVal): BigVal {
+        val n = this.toDouble().roundToInt()
+        var r = rVal.toDouble().roundToInt()
+        if (n < 0 || r < 0 || r > n || n > 9999) throw IllegalArgumentException("Domain error")
+        if (r > n - r) r = n - r
+        var res = BigVal(1.0)
+        for (i in 1..r) {
+            res = res * BigVal((n - i + 1).toDouble()) / BigVal(i.toDouble())
+        }
+        return res
+    }
+    
     fun lnVal(): BigVal {
         if (this.mantissa <= 0.0) throw IllegalArgumentException("Result is non-real")
         return logVal() * BigVal(ln(10.0))
@@ -240,7 +333,7 @@ class BigVal {
         val expD = expB.toDouble()
         
         // If exponent is in reasonable display range, format as a regular decimal
-        if (expB.exponent == null && expD.isFinite() && expD >= -4.0 && expD < 11.0) {
+        if (expB.exponent == null && expD.isFinite() && expD >= -4.0 && expD < 1e15) {
             val d = toDouble()
             return if (d == d.toLong().toDouble()) {
                 d.toLong().toString()
