@@ -45,6 +45,13 @@ import com.example.ui.theme.MyApplicationTheme
 import com.example.db.HistoryItem
 import kotlin.math.*
 import java.util.Locale
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.pointerInput
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -230,7 +237,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vib
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(8.dp)
         ) {
             // Mode Banner (DEG status, base status, scientific triggers)
             Row(
@@ -1563,29 +1570,45 @@ fun FunctionGrapherDialog(
     angleMode: String,
     onDismiss: () -> Unit
 ) {
-    var formula by remember { mutableStateOf("sin(x) * x") }
+    // Formulas setup - up to 3 concurrent functions
+    var formula1 by remember { mutableStateOf("sin(x) * x") }
+    var formula2 by remember { mutableStateOf("cos(x) * 3") }
+    var formula3 by remember { mutableStateOf("abs(x) - 4") }
+
+    var formula1Enabled by remember { mutableStateOf(true) }
+    var formula2Enabled by remember { mutableStateOf(false) }
+    var formula3Enabled by remember { mutableStateOf(false) }
+
+    // Selected textbox focus track to inject presets
+    var activeFormulaSelection by remember { mutableStateOf(1) } // 1, 2, or 3
+
+    // Double precision bounds parameters
     var xMinStr by remember { mutableStateOf("-10") }
     var xMaxStr by remember { mutableStateOf("10") }
     var yMinStr by remember { mutableStateOf("-10") }
     var yMaxStr by remember { mutableStateOf("10") }
 
-    val xMin = xMinStr.toDoubleOrNull() ?: -10.0
-    val xMax = xMaxStr.toDoubleOrNull() ?: 10.0
-    val yMin = yMinStr.toDoubleOrNull() ?: -10.0
-    val yMax = yMaxStr.toDoubleOrNull() ?: 10.0
+    var xMin by remember(xMinStr) { mutableStateOf(xMinStr.toDoubleOrNull() ?: -10.0) }
+    var xMax by remember(xMaxStr) { mutableStateOf(xMaxStr.toDoubleOrNull() ?: 10.0) }
+    var yMin by remember(yMinStr) { mutableStateOf(yMinStr.toDoubleOrNull() ?: -10.0) }
+    var yMax by remember(yMaxStr) { mutableStateOf(yMaxStr.toDoubleOrNull() ?: 10.0) }
 
-    val presets = listOf("sin(x) * x", "sin(x)", "cos(x)", "abs(x)", "x^2 - 4", "ln(x)", "sqrt(x)")
+    // Multi-curve preset templates
+    val presets = listOf("sin(x) * x", "sin(x)", "cos(x)", "abs(x)", "x^2 - 4", "ln(x)", "sqrt(x)", "3 * sin(x)/x")
 
-    // Precompute graph points to avoid heavy parsing of 300 formula expressions inside the Canvas draw pass
-    val graphPoints = remember(formula, angleMode, xMin, xMax) {
+    // Interactive Tap tracing state
+    var tappedXVal by remember { mutableStateOf<Double?>(null) }
+
+    // Precompute trace lists for high performance canvas rendering
+    val graphPoints1 = remember(formula1, angleMode, xMin, xMax) {
         val pointsList = mutableListOf<Pair<Double, Double>>()
-        if (xMax > xMin && formula.isNotBlank()) {
+        if (xMax > xMin && formula1.isNotBlank()) {
             val steps = 300
             val stepSize = (xMax - xMin) / steps
             for (j in 0..steps) {
                 val xVal = xMin + j * stepSize
                 val yVal = try {
-                    val parser = CalculatorParser(formula, angleMode, mapOf("x" to xVal))
+                    val parser = CalculatorParser(formula1, angleMode, mapOf("x" to xVal))
                     parser.parse().toDouble()
                 } catch (e: Throwable) {
                     Double.NaN
@@ -1596,226 +1619,787 @@ fun FunctionGrapherDialog(
         pointsList
     }
 
-    AlertDialog(
+    val graphPoints2 = remember(formula2, angleMode, xMin, xMax) {
+        val pointsList = mutableListOf<Pair<Double, Double>>()
+        if (xMax > xMin && formula2.isNotBlank()) {
+            val steps = 300
+            val stepSize = (xMax - xMin) / steps
+            for (j in 0..steps) {
+                val xVal = xMin + j * stepSize
+                val yVal = try {
+                    val parser = CalculatorParser(formula2, angleMode, mapOf("x" to xVal))
+                    parser.parse().toDouble()
+                } catch (e: Throwable) {
+                    Double.NaN
+                }
+                pointsList.add(Pair(xVal, yVal))
+            }
+        }
+        pointsList
+    }
+
+    val graphPoints3 = remember(formula3, angleMode, xMin, xMax) {
+        val pointsList = mutableListOf<Pair<Double, Double>>()
+        if (xMax > xMin && formula3.isNotBlank()) {
+            val steps = 300
+            val stepSize = (xMax - xMin) / steps
+            for (j in 0..steps) {
+                val xVal = xMin + j * stepSize
+                val yVal = try {
+                    val parser = CalculatorParser(formula3, angleMode, mapOf("x" to xVal))
+                    parser.parse().toDouble()
+                } catch (e: Throwable) {
+                    Double.NaN
+                }
+                pointsList.add(Pair(xVal, yVal))
+            }
+        }
+        pointsList
+    }
+
+    // Evaluate tapped X coordinates for crosshair readout overlay
+    val evaluatedTappedVals = remember(tappedXVal, formula1, formula2, formula3, angleMode) {
+        val x = tappedXVal
+        if (x != null && x.isFinite()) {
+            val y1 = try {
+                val parser = CalculatorParser(formula1, angleMode, mapOf("x" to x))
+                parser.parse().toDouble()
+            } catch (e: Throwable) {
+                Double.NaN
+            }
+            val y2 = try {
+                val parser = CalculatorParser(formula2, angleMode, mapOf("x" to x))
+                parser.parse().toDouble()
+            } catch (e: Throwable) {
+                Double.NaN
+            }
+            val y3 = try {
+                val parser = CalculatorParser(formula3, angleMode, mapOf("x" to x))
+                parser.parse().toDouble()
+            } catch (e: Throwable) {
+                Double.NaN
+            }
+            Triple(y1, y2, y3)
+        } else {
+            null
+        }
+    }
+
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text("2D Scientific Function Plotter", fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-        },
-        text = {
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Color(0xFF0F172A) // Sleek slate-900 canvas dark theme
+        ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(8.dp)
             ) {
-                Text(
-                    text = "Formula in terms of x:",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF475569)
-                )
-
-                OutlinedTextField(
-                    value = formula,
-                    onValueChange = { formula = it },
-                    singleLine = true,
-                    placeholder = { Text("e.g. sin(x) * x") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color(0xFF0F172A),
-                        unfocusedTextColor = Color(0xFF0F172A)
-                    )
-                )
-
-                // Quick presets
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth()
+                // Workspace Header TopAppBar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    items(presets) { p ->
-                        Surface(
-                            onClick = { formula = p },
-                            color = Color(0xFFEFF6FF),
-                            shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(1.dp, Color(0xFFBFDBFE))
-                        ) {
-                            Text(
-                                text = p,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF1E40AF),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Return home",
+                            tint = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Text(
+                        text = "Plotter",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Angle warning badge
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF334155))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "TR_TRG: $angleMode",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF38BDF8)
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Canvas screen plot
-                Box(
+                // Split Pane/Layout with Form inputs & Active plots
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .background(Color(0xFF090D16), RoundedCornerShape(12.dp))
-                        .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(12.dp))
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val gridColor = Color(0xFF475569)
-                        val axisLineColor = Color(0xFF94A3B8)
-                        val curveColor = Color(0xFF10B981) // Neon emerald
+                    // Equations Panel Card
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Active Math Formula Declarations",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF38BDF8)
+                            )
 
-                        val scaleX = { x: Double -> ((x - xMin) / (xMax - xMin) * size.width).toFloat() }
-                        val scaleY = { y: Double -> (size.height - (y - yMin) / (yMax - yMin) * size.height).toFloat() }
-
-                        // Horizontal lines
-                        if (yMax > yMin) {
-                            val step = max(1.0, (yMax - yMin) / 10.0)
-                            var curr = floor(yMin)
-                            while (curr <= ceil(yMax)) {
-                                if (curr != 0.0) {
-                                    val sy = scaleY(curr)
-                                    drawLine(
-                                        color = gridColor.copy(alpha = 0.25f),
-                                        start = Offset(0f, sy),
-                                        end = Offset(size.width, sy),
-                                        strokeWidth = 1.dp.toPx()
+                            // Formula 1
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Checkbox(
+                                    checked = formula1Enabled,
+                                    onCheckedChange = { formula1Enabled = it },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = Color(0xFF06B6D4),
+                                        checkmarkColor = Color.Black
                                     )
+                                )
+                                OutlinedTextField(
+                                    value = formula1,
+                                    onValueChange = { formula1 = it },
+                                    label = { Text("y₁ (x)", color = Color(0xFF06B6D4)) },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { activeFormulaSelection = 1 },
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        focusedBorderColor = Color(0xFF06B6D4),
+                                        unfocusedBorderColor = Color(0xFF475569)
+                                    )
+                                )
+                            }
+
+                            // Formula 2
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Checkbox(
+                                    checked = formula2Enabled,
+                                    onCheckedChange = { formula2Enabled = it },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = Color(0xFFF59E0B),
+                                        checkmarkColor = Color.Black
+                                    )
+                                )
+                                OutlinedTextField(
+                                    value = formula2,
+                                    onValueChange = { formula2 = it },
+                                    label = { Text("y₂ (x)", color = Color(0xFFF59E0B)) },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { activeFormulaSelection = 2 },
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        focusedBorderColor = Color(0xFFF59E0B),
+                                        unfocusedBorderColor = Color(0xFF475569)
+                                    )
+                                )
+                            }
+
+                            // Formula 3
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Checkbox(
+                                    checked = formula3Enabled,
+                                    onCheckedChange = { formula3Enabled = it },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = Color(0xFF10B981),
+                                        checkmarkColor = Color.Black
+                                    )
+                                )
+                                OutlinedTextField(
+                                    value = formula3,
+                                    onValueChange = { formula3 = it },
+                                    label = { Text("y₃ (x)", color = Color(0xFF10B981)) },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { activeFormulaSelection = 3 },
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        focusedBorderColor = Color(0xFF10B981),
+                                        unfocusedBorderColor = Color(0xFF475569)
+                                    )
+                                )
+                            }
+
+                            // Injected preset templates row
+                            Text(
+                                text = "Presets Tap Box (inserts in active y${activeFormulaSelection} slot):",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF94A3B8)
+                            )
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(presets) { p ->
+                                    Surface(
+                                        onClick = {
+                                            if (activeFormulaSelection == 1) formula1 = p
+                                            else if (activeFormulaSelection == 2) formula2 = p
+                                            else formula3 = p
+                                        },
+                                        color = Color(0xFF334155),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(
+                                            text = p,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                        )
+                                    }
                                 }
-                                curr += step
                             }
                         }
+                    }
 
-                        // Vertical lines
-                        if (xMax > xMin) {
-                            val step = max(1.0, (xMax - xMin) / 10.0)
-                            var curr = floor(xMin)
-                            while (curr <= ceil(xMax)) {
-                                if (curr != 0.0) {
-                                    val sx = scaleX(curr)
-                                    drawLine(
-                                        color = gridColor.copy(alpha = 0.25f),
-                                        start = Offset(sx, 0f),
-                                        end = Offset(sx, size.height),
-                                        strokeWidth = 1.dp.toPx()
-                                    )
+                    // MAIN PLOTTING CANVAS CONTAINER WITH COORDS TRACING GESTURES
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(300.dp)
+                            .background(Color(0xFF020617), RoundedCornerShape(16.dp))
+                            .border(1.5.dp, Color(0xFF334155), RoundedCornerShape(16.dp))
+                    ) {
+                        Canvas(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInput(xMin, xMax) {
+                                    awaitEachGesture {
+                                        val down = awaitFirstDown(requireUnconsumed = false)
+                                        if (size.width > 0) {
+                                            val xFraction = (down.position.x / size.width).toDouble()
+                                            val clampedFraction = xFraction.coerceIn(0.0, 1.0)
+                                            tappedXVal = xMin + clampedFraction * (xMax - xMin)
+                                        }
+                                        down.consume()
+
+                                        while (true) {
+                                            val event = awaitPointerEvent()
+                                            val anyDown = event.changes.any { it.pressed }
+                                            if (!anyDown) break
+                                            val change = event.changes.firstOrNull()
+                                            if (change != null) {
+                                                if (size.width > 0) {
+                                                    val xFraction = (change.position.x / size.width).toDouble()
+                                                    val clampedFraction = xFraction.coerceIn(0.0, 1.0)
+                                                    tappedXVal = xMin + clampedFraction * (xMax - xMin)
+                                                }
+                                                change.consume()
+                                            }
+                                        }
+                                    }
                                 }
-                                curr += step
+                        ) {
+                            val gridColor = Color(0xFF334155)
+                            val axisLineColor = Color(0xFF64748B)
+
+                            // Helper scaling maps
+                            val scaleX = { x: Double ->
+                                val fraction = (x - xMin) / (xMax - xMin)
+                                if (fraction.isFinite()) (fraction * size.width).toFloat() else 0f
                             }
-                        }
+                            val scaleY = { y: Double ->
+                                val fraction = (y - yMin) / (yMax - yMin)
+                                if (fraction.isFinite()) (size.height - fraction * size.height).toFloat() else size.height
+                            }
 
-                        // X axis
-                        val axisY = scaleY(0.0)
-                        if (axisY in 0f..size.height) {
-                            drawLine(
-                                color = axisLineColor,
-                                start = Offset(0f, axisY),
-                                end = Offset(size.width, axisY),
-                                strokeWidth = 2.dp.toPx()
-                            )
-                        }
+                            // Dynamic Grid Drawing
+                            if (yMax > yMin) {
+                                val step = max(0.5, (yMax - yMin) / 10.0)
+                                var curr = floor(yMin)
+                                while (curr <= ceil(yMax)) {
+                                    if (curr != 0.0) {
+                                        val sy = scaleY(curr)
+                                        if (sy.isFinite() && sy in 0f..size.height) {
+                                            drawLine(
+                                                color = gridColor.copy(alpha = 0.4f),
+                                                start = Offset(0f, sy),
+                                                end = Offset(size.width, sy),
+                                                strokeWidth = 1.dp.toPx()
+                                            )
+                                        }
+                                    }
+                                    curr += step
+                                }
+                            }
 
-                        // Y axis
-                        val axisX = scaleX(0.0)
-                        if (axisX in 0f..size.width) {
-                            drawLine(
-                                color = axisLineColor,
-                                start = Offset(axisX, 0f),
-                                end = Offset(axisX, size.height),
-                                strokeWidth = 2.dp.toPx()
-                            )
-                        }
+                            if (xMax > xMin) {
+                                val step = max(0.5, (xMax - xMin) / 10.0)
+                                var curr = floor(xMin)
+                                while (curr <= ceil(xMax)) {
+                                    if (curr != 0.0) {
+                                        val sx = scaleX(curr)
+                                        if (sx.isFinite() && sx in 0f..size.width) {
+                                            drawLine(
+                                                color = gridColor.copy(alpha = 0.4f),
+                                                start = Offset(sx, 0f),
+                                                end = Offset(sx, size.height),
+                                                strokeWidth = 1.dp.toPx()
+                                            )
+                                        }
+                                    }
+                                    curr += step
+                                }
+                            }
 
-                        // Draw Curve using precomputed points
-                        if (graphPoints.isNotEmpty() && xMax > xMin && yMax > yMin) {
-                            val curvePath = Path()
-                            var isFirstPoint = true
-                            
-                            for (point in graphPoints) {
-                                val xVal = point.first
-                                val yVal = point.second
-                                
-                                if (yVal.isFinite()) {
-                                    val sx = scaleX(xVal)
-                                    val sy = scaleY(yVal)
-                                    
-                                    if (sx in 0f..size.width && sy in 0f..size.height) {
-                                        if (isFirstPoint) {
-                                            curvePath.moveTo(sx, sy)
-                                            isFirstPoint = false
+                            // Horizontal reference line X-Axis
+                            val zeroY = scaleY(0.0)
+                            if (zeroY in 0f..size.height) {
+                                drawLine(
+                                    color = axisLineColor,
+                                    start = Offset(0f, zeroY),
+                                    end = Offset(size.width, zeroY),
+                                    strokeWidth = 2.dp.toPx()
+                                )
+                            }
+
+                            // Vertical reference line Y-Axis
+                            val zeroX = scaleX(0.0)
+                            if (zeroX in 0f..size.width) {
+                                drawLine(
+                                    color = axisLineColor,
+                                    start = Offset(zeroX, 0f),
+                                    end = Offset(zeroX, size.height),
+                                    strokeWidth = 2.dp.toPx()
+                                )
+                            }
+
+                            // DRAW CURVE 1
+                            if (formula1Enabled && graphPoints1.isNotEmpty() && xMax > xMin && yMax > yMin) {
+                                val curvePath = Path()
+                                var isFirstPoint = true
+                                for (point in graphPoints1) {
+                                    val xVal = point.first
+                                    val yVal = point.second
+                                    if (xVal.isFinite() && yVal.isFinite()) {
+                                        val sx = scaleX(xVal)
+                                        val sy = scaleY(yVal)
+                                        if (sx.isFinite() && sy.isFinite() && sx in 0f..size.width && sy in 0f..size.height) {
+                                            if (isFirstPoint) {
+                                                curvePath.moveTo(sx, sy)
+                                                isFirstPoint = false
+                                            } else {
+                                                curvePath.lineTo(sx, sy)
+                                            }
                                         } else {
-                                            curvePath.lineTo(sx, sy)
+                                            isFirstPoint = true
                                         }
                                     } else {
                                         isFirstPoint = true
                                     }
-                                } else {
-                                    isFirstPoint = true
+                                }
+                                drawPath(
+                                    path = curvePath,
+                                    color = Color(0xFF06B6D4), // Cyan neon curve
+                                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                                )
+                            }
+
+                            // DRAW CURVE 2
+                            if (formula2Enabled && graphPoints2.isNotEmpty() && xMax > xMin && yMax > yMin) {
+                                val curvePath = Path()
+                                var isFirstPoint = true
+                                for (point in graphPoints2) {
+                                    val xVal = point.first
+                                    val yVal = point.second
+                                    if (xVal.isFinite() && yVal.isFinite()) {
+                                        val sx = scaleX(xVal)
+                                        val sy = scaleY(yVal)
+                                        if (sx.isFinite() && sy.isFinite() && sx in 0f..size.width && sy in 0f..size.height) {
+                                            if (isFirstPoint) {
+                                                curvePath.moveTo(sx, sy)
+                                                isFirstPoint = false
+                                            } else {
+                                                curvePath.lineTo(sx, sy)
+                                            }
+                                        } else {
+                                            isFirstPoint = true
+                                        }
+                                    } else {
+                                        isFirstPoint = true
+                                    }
+                                }
+                                drawPath(
+                                    path = curvePath,
+                                    color = Color(0xFFF59E0B), // Neon Orange curve
+                                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                                )
+                            }
+
+                            // DRAW CURVE 3
+                            if (formula3Enabled && graphPoints3.isNotEmpty() && xMax > xMin && yMax > yMin) {
+                                val curvePath = Path()
+                                var isFirstPoint = true
+                                for (point in graphPoints3) {
+                                    val xVal = point.first
+                                    val yVal = point.second
+                                    if (xVal.isFinite() && yVal.isFinite()) {
+                                        val sx = scaleX(xVal)
+                                        val sy = scaleY(yVal)
+                                        if (sx.isFinite() && sy.isFinite() && sx in 0f..size.width && sy in 0f..size.height) {
+                                            if (isFirstPoint) {
+                                                curvePath.moveTo(sx, sy)
+                                                isFirstPoint = false
+                                            } else {
+                                                curvePath.lineTo(sx, sy)
+                                            }
+                                        } else {
+                                            isFirstPoint = true
+                                        }
+                                    } else {
+                                        isFirstPoint = true
+                                    }
+                                }
+                                drawPath(
+                                    path = curvePath,
+                                    color = Color(0xFF10B981), // Neon Emerald curve
+                                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                                )
+                            }
+
+                            // DRAW TRACING VERTICAL DOTS INTERSECTS
+                            val rawTx = tappedXVal
+                            if (rawTx != null && rawTx.isFinite() && rawTx >= xMin && rawTx <= xMax) {
+                                val sx = scaleX(rawTx)
+                                if (sx.isFinite() && sx in 0f..size.width) {
+                                    // Plot tracing vertical pointer
+                                    drawLine(
+                                        color = Color.White.copy(alpha = 0.5f),
+                                        start = Offset(sx, 0f),
+                                        end = Offset(sx, size.height),
+                                        strokeWidth = 1.5.dp.toPx()
+                                    )
+
+                                    // Intersection dots
+                                    evaluatedTappedVals?.let { (y1, y2, y3) ->
+                                        if (formula1Enabled && y1.isFinite() && y1 >= yMin && y1 <= yMax) {
+                                            val sy1 = scaleY(y1)
+                                            if (sy1.isFinite() && sy1 in 0f..size.height) {
+                                                drawCircle(Color.White, radius = 7.dp.toPx(), center = Offset(sx, sy1))
+                                                drawCircle(Color(0xFF06B6D4), radius = 4.dp.toPx(), center = Offset(sx, sy1))
+                                            }
+                                        }
+                                        if (formula2Enabled && y2.isFinite() && y2 >= yMin && y2 <= yMax) {
+                                            val sy2 = scaleY(y2)
+                                            if (sy2.isFinite() && sy2 in 0f..size.height) {
+                                                drawCircle(Color.White, radius = 7.dp.toPx(), center = Offset(sx, sy2))
+                                                drawCircle(Color(0xFFF59E0B), radius = 4.dp.toPx(), center = Offset(sx, sy2))
+                                            }
+                                        }
+                                        if (formula3Enabled && y3.isFinite() && y3 >= yMin && y3 <= yMax) {
+                                            val sy3 = scaleY(y3)
+                                            if (sy3.isFinite() && sy3 in 0f..size.height) {
+                                                drawCircle(Color.White, radius = 7.dp.toPx(), center = Offset(sx, sy3))
+                                                drawCircle(Color(0xFF10B981), radius = 4.dp.toPx(), center = Offset(sx, sy3))
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                            
-                            drawPath(
-                                path = curvePath,
-                                color = curveColor,
-                                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                        }
+
+                        // Floating dynamic trace overlay card
+                        evaluatedTappedVals?.let { (y1, y2, y3) ->
+                            val tx = tappedXVal
+                            if (tx != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopStart)
+                                        .padding(12.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xE60F172A))
+                                        .border(1.dp, Color(0xFF475569), RoundedCornerShape(8.dp))
+                                        .padding(8.dp)
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("TRACE COORDS", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        Text("x: ${String.format(Locale.US, "%.4f", tx)}", color = Color.White, fontSize = 11.sp)
+                                        if (formula1Enabled) {
+                                            Text(
+                                                text = "y₁: ${if (y1.isFinite()) String.format(Locale.US, "%.4f", y1) else "Undefined"}",
+                                                color = Color(0xFF22D3EE),
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        if (formula2Enabled) {
+                                            Text(
+                                                text = "y₂: ${if (y2.isFinite()) String.format(Locale.US, "%.4f", y2) else "Undefined"}",
+                                                color = Color(0xFFFBBF24),
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        if (formula3Enabled) {
+                                            Text(
+                                                text = "y₃: ${if (y3.isFinite()) String.format(Locale.US, "%.4f", y3) else "Undefined"}",
+                                                color = Color(0xFF34D399),
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Bottom right helper tips
+                        Text(
+                            text = "Tap & drag to slide tracing target",
+                            color = Color(0xFF64748B),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(10.dp)
+                        )
+                    }
+
+                    // INTERACTIVE ZOOM & NAVIGATION PADS TOOLBAR
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF1E293B))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Interactive Precision Navigation Dashboard",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFF94A3B8)
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Zoom buttons
+                            Button(
+                                onClick = {
+                                    val currentXSpan = xMax - xMin
+                                    val centerX = xMin + currentXSpan / 2.0
+                                    val newHalfSpan = (currentXSpan * 0.6) / 2.0
+                                    xMinStr = String.format(Locale.US, "%.3f", centerX - newHalfSpan)
+                                    xMaxStr = String.format(Locale.US, "%.3f", centerX + newHalfSpan)
+
+                                    val currentYSpan = yMax - yMin
+                                    val centerY = yMin + currentYSpan / 2.0
+                                    val newYHalfSpan = (currentYSpan * 0.6) / 2.0
+                                    yMinStr = String.format(Locale.US, "%.3f", centerY - newYHalfSpan)
+                                    yMaxStr = String.format(Locale.US, "%.3f", centerY + newYHalfSpan)
+                                },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
+                            ) {
+                                Text("🔍 Zoom In [+]", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = {
+                                    val currentXSpan = xMax - xMin
+                                    val centerX = xMin + currentXSpan / 2.0
+                                    val newHalfSpan = (currentXSpan * 1.5) / 2.0
+                                    xMinStr = String.format(Locale.US, "%.3f", centerX - newHalfSpan)
+                                    xMaxStr = String.format(Locale.US, "%.3f", centerX + newHalfSpan)
+
+                                    val currentYSpan = yMax - yMin
+                                    val centerY = yMin + currentYSpan / 2.0
+                                    val newYHalfSpan = (currentYSpan * 1.5) / 2.0
+                                    yMinStr = String.format(Locale.US, "%.3f", centerY - newYHalfSpan)
+                                    yMaxStr = String.format(Locale.US, "%.3f", centerY + newYHalfSpan)
+                                },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
+                            ) {
+                                Text("🔎 Zoom Out [-]", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Spacer(modifier = Modifier.weight(1f))
+
+                            // Reset standard viewport [-10, 10]
+                            Button(
+                                onClick = {
+                                    xMinStr = "-10"
+                                    xMaxStr = "10"
+                                    yMinStr = "-10"
+                                    yMaxStr = "10"
+                                    tappedXVal = null
+                                },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF475569))
+                            ) {
+                                Text("↺ Reset View", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+
+                        // Shift/Pan buttons triggers
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            val panButton = @Composable { label: String, onClick: () -> Unit ->
+                                Button(
+                                    onClick = onClick,
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(vertical = 4.dp),
+                                    shape = RoundedCornerShape(6.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155))
+                                ) {
+                                    Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            panButton("◀ Left") {
+                                val step = (xMax - xMin) * 0.25
+                                xMinStr = String.format(Locale.US, "%.3f", xMin - step)
+                                xMaxStr = String.format(Locale.US, "%.3f", xMax - step)
+                            }
+                            panButton("▶ Right") {
+                                val step = (xMax - xMin) * 0.25
+                                xMinStr = String.format(Locale.US, "%.3f", xMin + step)
+                                xMaxStr = String.format(Locale.US, "%.3f", xMax + step)
+                            }
+                            panButton("▲ Up") {
+                                val step = (yMax - yMin) * 0.25
+                                yMinStr = String.format(Locale.US, "%.3f", yMin + step)
+                                yMaxStr = String.format(Locale.US, "%.3f", yMax + step)
+                            }
+                            panButton("▼ Down") {
+                                val step = (yMax - yMin) * 0.25
+                                yMinStr = String.format(Locale.US, "%.3f", yMin - step)
+                                yMaxStr = String.format(Locale.US, "%.3f", yMax - step)
+                            }
+                        }
+                    }
+
+                    // MANUAL INPUTS CARD
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = xMinStr,
+                                onValueChange = { xMinStr = it },
+                                label = { Text("xMin", fontSize = 11.sp, color = Color(0xFF94A3B8)) },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = Color(0xFF38BDF8),
+                                    unfocusedBorderColor = Color(0xFF475569)
+                                )
+                            )
+                            OutlinedTextField(
+                                value = xMaxStr,
+                                onValueChange = { xMaxStr = it },
+                                label = { Text("xMax", fontSize = 11.sp, color = Color(0xFF94A3B8)) },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = Color(0xFF38BDF8),
+                                    unfocusedBorderColor = Color(0xFF475569)
+                                )
+                            )
+                            OutlinedTextField(
+                                value = yMinStr,
+                                onValueChange = { yMinStr = it },
+                                label = { Text("yMin", fontSize = 11.sp, color = Color(0xFF94A3B8)) },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = Color(0xFF38BDF8),
+                                    unfocusedBorderColor = Color(0xFF475569)
+                                )
+                            )
+                            OutlinedTextField(
+                                value = yMaxStr,
+                                onValueChange = { yMaxStr = it },
+                                label = { Text("yMax", fontSize = 11.sp, color = Color(0xFF94A3B8)) },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = Color(0xFF38BDF8),
+                                    unfocusedBorderColor = Color(0xFF475569)
+                                )
                             )
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Scale controls inputs
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = xMinStr,
-                        onValueChange = { xMinStr = it },
-                        label = { Text("xMin") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color(0xFF0F172A), unfocusedTextColor = Color(0xFF0F172A))
-                    )
-                    OutlinedTextField(
-                        value = xMaxStr,
-                        onValueChange = { xMaxStr = it },
-                        label = { Text("xMax") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color(0xFF0F172A), unfocusedTextColor = Color(0xFF0F172A))
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = yMinStr,
-                        onValueChange = { yMinStr = it },
-                        label = { Text("yMin") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color(0xFF0F172A), unfocusedTextColor = Color(0xFF0F172A))
-                    )
-                    OutlinedTextField(
-                        value = yMaxStr,
-                        onValueChange = { yMaxStr = it },
-                        label = { Text("yMax") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color(0xFF0F172A), unfocusedTextColor = Color(0xFF0F172A))
-                    )
+                    // Bottom exit actions
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE2E8F0))
+                    ) {
+                        Text("Return to Scientific Multi-Mode Keypad", color = Color(0xFF0F172A), fontWeight = FontWeight.Bold)
+                    }
                 }
             }
-        },
-        confirmButton = {
-            Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E40AF))) {
-                Text("Close Plotter", color = Color.White)
-            }
-        },
-        containerColor = Color.White
-    )
+        }
+    }
 }
