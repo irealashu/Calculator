@@ -1,6 +1,10 @@
 package com.example
 
 import android.os.Bundle
+import android.os.Vibrator
+import android.os.VibrationEffect
+import android.os.Build
+import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -23,6 +27,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -42,9 +50,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         setContent {
             MyApplicationTheme {
-                CalculatorScreen()
+                CalculatorScreen(vibrator = vibrator)
             }
         }
     }
@@ -63,8 +72,78 @@ sealed class CalcKey {
     data class Parenthesis(val value: String) : CalcKey()
 }
 
+// Material 3 compliant high-fidelity palette architectures
+data class CalcTheme(
+    val id: String,
+    val name: String,
+    val isDark: Boolean,
+    val backgroundColor: Color,
+    val darkSurfaceColor: Color,
+    val operatorColor: Color,
+    val actionColor: Color,
+    val digitColor: Color,
+    val clearColor: Color,
+    val clearTextColor: Color,
+    val operatorTextColor: Color,
+    val expressionTextColor: Color,
+    val previewResultColor: Color,
+    val functionalTextColor: Color,
+    val labelColor: Color = if (isDark) Color.White else Color(0xFF0F172A)
+)
+
+val ThemesList = listOf(
+    CalcTheme(
+        id = "prism_ice_blue",
+        name = "Prism Ice Blue",
+        isDark = false,
+        backgroundColor = Color(0xFFEDF2F8),
+        darkSurfaceColor = Color(0xFFD3E0EA),
+        operatorColor = Color(0xFF1E40AF),
+        actionColor = Color(0xFFE0F2FE),
+        digitColor = Color(0xFFFFFFFF),
+        clearColor = Color(0xFFFCA5A5),
+        clearTextColor = Color(0xFF991B1B),
+        operatorTextColor = Color(0xFFFFFFFF),
+        expressionTextColor = Color(0xFF0F172A),
+        previewResultColor = Color(0xFF475569),
+        functionalTextColor = Color(0xFF1D4ED8)
+    ),
+    CalcTheme(
+        id = "midnight_forest",
+        name = "Midnight Forest",
+        isDark = true,
+        backgroundColor = Color(0xFF0C1315),
+        darkSurfaceColor = Color(0xFF142422),
+        operatorColor = Color(0xFF0D9488),
+        actionColor = Color(0xFF11433E),
+        digitColor = Color(0xFF131D1B),
+        clearColor = Color(0xFFE11D48),
+        clearTextColor = Color(0xFFFFFFFF),
+        operatorTextColor = Color(0xFFFFFFFF),
+        expressionTextColor = Color(0xFFCCFBF1),
+        previewResultColor = Color(0xFF99F6E4),
+        functionalTextColor = Color(0xFF2DD4BF)
+    ),
+    CalcTheme(
+        id = "crimson_slate",
+        name = "Crimson Slate",
+        isDark = true,
+        backgroundColor = Color(0xFF0F1117),
+        darkSurfaceColor = Color(0xFF1E2430),
+        operatorColor = Color(0xFF991B1B),
+        actionColor = Color(0xFF551919),
+        digitColor = Color(0xFF171F2C),
+        clearColor = Color(0xFFE11D48),
+        clearTextColor = Color(0xFFFFFFFF),
+        operatorTextColor = Color(0xFFFFFFFF),
+        expressionTextColor = Color(0xFFFEE2E2),
+        previewResultColor = Color(0xFFFDA4AF),
+        functionalTextColor = Color(0xFFF43F5E)
+    )
+)
+
 @Composable
-fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
+fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vibrator? = null) {
     val expr by viewModel.expression.collectAsState()
     val preview by viewModel.previewResult.collectAsState()
     val error by viewModel.errorMessage.collectAsState()
@@ -73,10 +152,16 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
     val baseMode by viewModel.baseMode.collectAsState()
     val variables by viewModel.variables.collectAsState()
     val historyList by viewModel.historyState.collectAsState()
+    val isHighPrecision by viewModel.isHighPrecision.collectAsState()
 
     var showHistory by remember { mutableStateOf(false) }
     var activeTab by remember { mutableStateOf("TRIG") }
     
+    // Dynamic Theme state
+    var currentTheme by remember { mutableStateOf(ThemesList[0]) }
+    var showThemeDialog by remember { mutableStateOf(false) }
+    var showGrapherDialog by remember { mutableStateOf(false) }
+
     // Dialog/Form triggers
     var showSolverDialog by remember { mutableStateOf<String?>(null) } // "QUAD", "SYSTEM"
     var showConversionDialog by remember { mutableStateOf(false) }
@@ -84,19 +169,57 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
 
     val haptic = LocalHapticFeedback.current
 
-    // Premium Prism Ice Blue Light Theme Layout
-    val backgroundColor = Color(0xFFEDF2F8)     // High-contrast clean icy background
-    val darkSurfaceColor = Color(0xFFD3E0EA)    // Soft blue-grey secondary background/surface
-    val operatorColor = Color(0xFF1E40AF)       // Rich Indigo Blue for operators and equal keys
-    val actionColor = Color(0xFFE0F2FE)         // Light blue accent container (sky-100)
-    val digitColor = Color(0xFFFFFFFF)          // Ultra-crisp paper white background for numbers
-    val clearColor = Color(0xFFFCA5A5)          // Soft coral rose for clear action (AC indicator)
+    // Precision active themes mappings
+    val backgroundColor = currentTheme.backgroundColor
+    val darkSurfaceColor = currentTheme.darkSurfaceColor
+    val operatorColor = currentTheme.operatorColor
+    val actionColor = currentTheme.actionColor
+    val digitColor = currentTheme.digitColor
+    val clearColor = currentTheme.clearColor
 
-    val clearTextColor = Color(0xFF991B1B)      // High contrast deep red for clear text
-    val operatorTextColor = Color(0xFFFFFFFF)   // Clean white text on operator keys
-    val expressionTextColor = Color(0xFF0F172A) // Deep charcoal / slate-900 for max formula contrast
-    val previewResultColor = Color(0xFF475569)  // Deep slate grey for live preview calculation result
-    val functionalTextColor = Color(0xFF1D4ED8) // Rich royal cobalt blue for scientific helper texts
+    val clearTextColor = currentTheme.clearTextColor
+    val operatorTextColor = currentTheme.operatorTextColor
+    val expressionTextColor = currentTheme.expressionTextColor
+    val previewResultColor = currentTheme.previewResultColor
+    val functionalTextColor = currentTheme.functionalTextColor
+    val labelColor = currentTheme.labelColor
+
+    // Custom Weighted Vibrotactile Feedback Loop
+    val triggerVibe = { keyType: CalcKey ->
+        if (vibrator != null) {
+            try {
+                val duration: Long
+                val amplitude: Int
+                when (keyType) {
+                    is CalcKey.Digit, is CalcKey.Parenthesis -> {
+                        duration = 10
+                        amplitude = 40 // subtle light digit click
+                    }
+                    is CalcKey.Operator -> {
+                        duration = 20
+                        amplitude = 110 // firm operator snap
+                    }
+                    is CalcKey.Equal -> {
+                        duration = 35
+                        amplitude = 170 // crisp action success snap
+                    }
+                    else -> {
+                        duration = 22
+                        amplitude = 135 // moderate action press
+                    }
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createOneShot(duration, amplitude))
+                } else {
+                    vibrator.vibrate(duration)
+                }
+            } catch (e: Exception) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            }
+        } else {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -109,24 +232,24 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            // Mode Banner (DEG status, base status, titles)
+            // Mode Banner (DEG status, base status, scientific triggers)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Clicking Angle Mode toggles DEG/RAD
                 Button(
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        triggerVibe(CalcKey.Digit("0"))
                         viewModel.toggleAngleMode()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = actionColor),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.height(34.dp)
+                    modifier = Modifier.height(36.dp)
                 ) {
                     Text(
                         text = angleMode,
@@ -136,56 +259,108 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                     )
                 }
 
-                Text(
-                    text = "IRA05-26",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = operatorColor,
-                    letterSpacing = 1.sp
-                )
+                Spacer(modifier = Modifier.weight(1.0f))
 
-                // HIST Button
+                // Interactive 2D Plotter trigger
                 IconButton(
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        triggerVibe(CalcKey.Digit("0"))
+                        showGrapherDialog = true
+                    },
+                    modifier = Modifier
+                        .background(actionColor, RoundedCornerShape(12.dp))
+                        .size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "2D Function Plotter",
+                        tint = functionalTextColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Dynamic palette trigger
+                IconButton(
+                    onClick = {
+                        triggerVibe(CalcKey.Digit("0"))
+                        showThemeDialog = true
+                    },
+                    modifier = Modifier
+                        .background(actionColor, RoundedCornerShape(12.dp))
+                        .size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Build,
+                        contentDescription = "Theme Palette Dialog",
+                        tint = functionalTextColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // COMPANION HIST Sidebar
+                IconButton(
+                    onClick = {
+                        triggerVibe(CalcKey.Digit("0"))
                         showHistory = true
                     },
                     modifier = Modifier
                         .background(actionColor, RoundedCornerShape(12.dp))
-                        .size(34.dp)
+                        .size(36.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
-                        contentDescription = "Show History",
+                        contentDescription = "Companion Console",
                         tint = functionalTextColor,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
 
-            // Real-time scientific indicator status bar
+            // Real-time scientific indicator status & Precision Mode Selector
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "VARS: [x=${variables["x"]}, y=${variables["y"]}, z=${variables["z"]}]",
+                    text = "VARS: [x=${String.format(Locale.US, "%.1f", variables["x"] ?: 0.0)}, y=${String.format(Locale.US, "%.1f", variables["y"] ?: 0.0)}]",
                     fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
                     color = previewResultColor.copy(alpha = 0.8f)
                 )
+
+                // High Precision decimal engine Toggle Switch
+                Button(
+                    onClick = {
+                        triggerVibe(CalcKey.Digit("0"))
+                        viewModel.toggleHighPrecision()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isHighPrecision) operatorColor else actionColor
+                    ),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Text(
+                        text = if (isHighPrecision) "DEC Mode: High Prec" else "DEC Mode: Float64",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (isHighPrecision) operatorTextColor else functionalTextColor
+                    )
+                }
             }
 
-            // High-fidelity seamless display expression panel
+            // Display expression panel
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1.0f)
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Color.White)
-                    .border(1.5.dp, Color(0xFFBFDBFE), RoundedCornerShape(20.dp))
+                    .background(if (currentTheme.isDark) Color(0xFF131920) else Color.White)
+                    .border(1.5.dp, if (currentTheme.isDark) Color(0xFF374151) else Color(0xFFBFDBFE), RoundedCornerShape(20.dp))
                     .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 Column(
@@ -198,7 +373,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                             text = error ?: "Format Error",
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFB91C1C),
+                            color = Color(0xFFEF4444),
                             textAlign = TextAlign.End
                         )
                     } else if (preview.isNotEmpty()) {
@@ -244,7 +419,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                     ) {
                         Text(
                             text = expr.ifEmpty { "0" },
-                            fontSize = if (expr.length > 8) 40.sp else 54.sp,
+                            fontSize = if (expr.length > 8) 36.sp else 50.sp,
                             fontWeight = FontWeight.Light,
                             color = expressionTextColor,
                             textAlign = TextAlign.End,
@@ -255,7 +430,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                 }
             }
 
-            // Scrollable Menu Tabs for math, trig, probability, solvers, memory
+            // Scrollable ribbon menu
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -270,7 +445,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                             .clip(RoundedCornerShape(12.dp))
                             .background(if (isActive) operatorColor else actionColor)
                             .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                triggerVibe(CalcKey.Digit("0"))
                                 activeTab = tab
                             }
                             .padding(horizontal = 14.dp, vertical = 8.dp)
@@ -285,7 +460,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                 }
             }
 
-            // Active Tab helper ribbon buttons
+            // Active Tab Ribbon Ribbon Helpers
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -305,7 +480,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                                 "sinh(" to "sinh", "cosh(" to "cosh", "tanh(" to "tanh"
                             )
                             list.forEach { item ->
-                                RibbonButton(label = item.second, onClick = { viewModel.onFunctionClick(item.first) })
+                                RibbonButton(theme = currentTheme, label = item.second, onClick = { viewModel.onFunctionClick(item.first) })
                             }
                         }
                     }
@@ -322,7 +497,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                                 "fPart(" to "fPart", "int(" to "int", "min(" to "min", "max(" to "max"
                             )
                             list.forEach { item ->
-                                RibbonButton(label = item.second, onClick = { viewModel.onFunctionClick(item.first) })
+                                RibbonButton(theme = currentTheme, label = item.second, onClick = { viewModel.onFunctionClick(item.first) })
                             }
                         }
                     }
@@ -331,9 +506,9 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            RibbonButton(label = "nCr", onClick = { viewModel.onOperatorClick("nCr") })
-                            RibbonButton(label = "nPr", onClick = { viewModel.onOperatorClick("nPr") })
-                            RibbonButton(label = "Factorial (x!)", onClick = { viewModel.onDigitClick("!") })
+                            RibbonButton(theme = currentTheme, label = "nCr", onClick = { viewModel.onOperatorClick("nCr") })
+                            RibbonButton(theme = currentTheme, label = "nPr", onClick = { viewModel.onOperatorClick("nPr") })
+                            RibbonButton(theme = currentTheme, label = "Factorial (x!)", onClick = { viewModel.onDigitClick("!") })
                         }
                     }
                     "MEMORY" -> {
@@ -344,10 +519,10 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             listOf("x", "y", "z", "t", "a", "b", "c", "d").forEach { variable ->
-                                RibbonButton(label = "RCL $variable", onClick = { viewModel.onDigitClick(variable) })
-                                RibbonButton(label = "STO $variable", onClick = { showVariableStoreDialog = variable })
+                                RibbonButton(theme = currentTheme, label = "RCL $variable", onClick = { viewModel.onDigitClick(variable) })
+                                RibbonButton(theme = currentTheme, label = "STO $variable", onClick = { showVariableStoreDialog = variable })
                             }
-                            RibbonButton(label = "Clear Mem", onClick = { viewModel.clearVariables() })
+                            RibbonButton(theme = currentTheme, label = "Clear Mem", onClick = { viewModel.clearVariables() })
                         }
                     }
                     "SOLVERS" -> {
@@ -355,8 +530,8 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            RibbonButton(label = "Quadratic Solver (ax²+bx+c=0)", onClick = { showSolverDialog = "QUAD" })
-                            RibbonButton(label = "2x2 Linear System", onClick = { showSolverDialog = "SYSTEM" })
+                            RibbonButton(theme = currentTheme, label = "Quadratic Solver (ax²+bx+c=0)", onClick = { showSolverDialog = "QUAD" })
+                            RibbonButton(theme = currentTheme, label = "2x2 Linear System", onClick = { showSolverDialog = "SYSTEM" })
                         }
                     }
                     "CONV" -> {
@@ -364,7 +539,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            RibbonButton(label = "Conversion Menu", onClick = { showConversionDialog = true })
+                            RibbonButton(theme = currentTheme, label = "Conversion Menu", onClick = { showConversionDialog = true })
                         }
                     }
                     "CONST" -> {
@@ -383,21 +558,20 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                                 "1.60218e-19" to "e (electron charge)"
                             )
                             list.forEach { item ->
-                                RibbonButton(label = item.second, onClick = { viewModel.onConstantClick(item.first) })
+                                RibbonButton(theme = currentTheme, label = item.second, onClick = { viewModel.onConstantClick(item.first) })
                             }
                         }
                     }
                 }
             }
 
-            // Scientific keypad layout - permanently visible
+            // High aesthetic permanent keypad
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(3.5f),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Unified scientific and standard keys
                 val unifiedGrid = listOf(
                     // Scientific Row 1
                     listOf(
@@ -462,7 +636,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
                                     .weight(1f)
                                     .fillMaxHeight(),
                                 onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    triggerVibe(key)
                                     when (key) {
                                         is CalcKey.Digit -> viewModel.onDigitClick(key.value)
                                         is CalcKey.Operator -> viewModel.onOperatorClick(key.value)
@@ -490,15 +664,15 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
             }
         }
 
-        // Sliding History Drawer
+        // Sliding Companion Panel Sidebar (History Logs + Variables tab panel)
         AnimatedVisibility(
             visible = showHistory,
-            enter = slideInVertically(
-                initialOffsetY = { it },
+            enter = slideInHorizontally(
+                initialOffsetX = { it },
                 animationSpec = spring(stiffness = Spring.StiffnessMedium)
             ) + fadeIn(),
-            exit = slideOutVertically(
-                targetOffsetY = { it },
+            exit = slideOutHorizontally(
+                targetOffsetX = { it },
                 animationSpec = spring(stiffness = Spring.StiffnessMedium)
             ) + fadeOut()
         ) {
@@ -513,131 +687,347 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
             ) {
                 Card(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(0.7f)
-                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth(0.85f)
+                        .fillMaxHeight()
+                        .align(Alignment.CenterEnd)
                         .clickable(enabled = false) {},
-                    shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-                    colors = CardDefaults.cardColors(containerColor = darkSurfaceColor)
+                    shape = RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp),
+                    colors = CardDefaults.cardColors(containerColor = darkSurfaceColor),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(24.dp)
+                            .padding(16.dp)
                     ) {
+                        var sidebarTab by remember { mutableStateOf("HISTORY") } // "HISTORY" or "VARIABLES"
+
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 16.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "History Log",
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
+                                text = "Companion Panel",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.ExtraBold,
                                 color = expressionTextColor
                             )
-
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (historyList.isNotEmpty()) {
-                                    IconButton(
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            viewModel.clearHistory()
-                                        }
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Delete,
-                                            contentDescription = "Clear all recordings",
-                                            tint = Color(0xFFB91C1C)
-                                        )
-                                    }
-                                }
-
-                                IconButton(
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        showHistory = false
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Close history pane",
-                                        tint = expressionTextColor
-                                    )
-                                }
+                            IconButton(onClick = { showHistory = false }) {
+                                Icon(Icons.Default.Close, contentDescription = "Close Sidebar", tint = expressionTextColor)
                             }
                         }
 
-                        HorizontalDivider(color = expressionTextColor.copy(alpha = 0.12f), thickness = 1.dp)
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                        if (historyList.isEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f),
-                                contentAlignment = Alignment.Center
+                        // Unified tab selector
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { sidebarTab = "HISTORY" },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (sidebarTab == "HISTORY") operatorColor else actionColor
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        imageVector = Icons.Default.Refresh,
-                                        contentDescription = null,
-                                        tint = previewResultColor,
-                                        modifier = Modifier.size(64.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    Text(
-                                        text = "No history available yet",
-                                        color = previewResultColor,
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
+                                Text(
+                                    "Logs",
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (sidebarTab == "HISTORY") operatorTextColor else functionalTextColor
+                                )
+                            }
+
+                            Button(
+                                onClick = { sidebarTab = "VARIABLES" },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (sidebarTab == "VARIABLES") operatorColor else actionColor
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1.1f)
+                            ) {
+                                Text(
+                                    "Variables",
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (sidebarTab == "VARIABLES") operatorTextColor else functionalTextColor
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider(color = expressionTextColor.copy(alpha = 0.12f), thickness = 1.dp)
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        if (sidebarTab == "HISTORY") {
+                            // History content
+                            if (historyList.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1.0f),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(
+                                            imageVector = Icons.Default.Refresh,
+                                            contentDescription = null,
+                                            tint = previewResultColor,
+                                            modifier = Modifier.size(56.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = "No calculations recorded yet",
+                                            color = previewResultColor,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    items(historyList) { item ->
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    triggerVibe(CalcKey.Digit("0"))
+                                                    viewModel.selectHistoryItem(item)
+                                                    showHistory = false
+                                                },
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = CardDefaults.cardColors(containerColor = digitColor)
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(12.dp),
+                                                horizontalAlignment = Alignment.End
+                                            ) {
+                                                Text(
+                                                    text = item.expression,
+                                                    fontSize = 13.sp,
+                                                    color = previewResultColor,
+                                                    textAlign = TextAlign.End
+                                                )
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    text = "= ${item.result}",
+                                                    fontSize = 16.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = expressionTextColor,
+                                                    textAlign = TextAlign.End
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = { viewModel.clearHistory() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("Clear All Logs", color = Color.White, fontWeight = FontWeight.Bold)
                                 }
                             }
                         } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f)
-                                    .padding(vertical = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                items(historyList) { item ->
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(backgroundColor.copy(alpha = 0.5f))
-                                            .clickable {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                viewModel.selectHistoryItem(item)
-                                                showHistory = false
+                            // Variables tab manager
+                            var newVarName by remember { mutableStateOf("") }
+                            var newVarValue by remember { mutableStateOf("") }
+
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                Text(
+                                    "Add Custom Variable",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = expressionTextColor
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedTextField(
+                                        value = newVarName,
+                                        onValueChange = { newVarName = it },
+                                        placeholder = { Text("Name", fontSize = 11.sp) },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = expressionTextColor,
+                                            unfocusedTextColor = expressionTextColor
+                                        )
+                                    )
+                                    OutlinedTextField(
+                                        value = newVarValue,
+                                        onValueChange = { newVarValue = it },
+                                        placeholder = { Text("Value", fontSize = 11.sp) },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1.2f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = expressionTextColor,
+                                            unfocusedTextColor = expressionTextColor
+                                        )
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            if (newVarName.isNotBlank() && newVarValue.isNotBlank()) {
+                                                triggerVibe(CalcKey.Equal)
+                                                viewModel.storeVariable(newVarName.trim(), newVarValue.trim())
+                                                newVarName = ""
+                                                newVarValue = ""
                                             }
-                                            .padding(16.dp),
-                                        horizontalAlignment = Alignment.End
+                                        },
+                                        modifier = Modifier
+                                            .background(operatorColor, RoundedCornerShape(12.dp))
+                                            .size(40.dp)
                                     ) {
-                                        Text(
-                                            text = item.expression,
-                                            fontSize = 16.sp,
-                                            color = previewResultColor,
-                                            textAlign = TextAlign.End
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = "= ${item.result}",
-                                            fontSize = 20.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = expressionTextColor,
-                                            textAlign = TextAlign.End
-                                        )
+                                        Icon(Icons.Default.Add, contentDescription = "Add custom variable", tint = Color.White)
                                     }
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    "Active Formulas / Variables",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = expressionTextColor
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    val currentVars = variables.toList().sortedBy { it.first }
+                                    items(currentVars) { (name, value) ->
+                                        val isPredefined = name in listOf("x", "y", "z", "t", "a", "b", "c", "d")
+                                        Card(
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = CardDefaults.cardColors(containerColor = digitColor),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(10.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(
+                                                            text = name,
+                                                            fontSize = 15.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = operatorColor
+                                                        )
+                                                        if (!isPredefined) {
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text(
+                                                                "[Custom]",
+                                                                fontSize = 9.sp,
+                                                                color = functionalTextColor
+                                                            )
+                                                        }
+                                                    }
+                                                    Text(
+                                                        text = "= $value",
+                                                        fontSize = 14.sp,
+                                                        color = expressionTextColor
+                                                    )
+                                                }
+
+                                                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                    // STO click triggers store
+                                                    TextButton(
+                                                        onClick = {
+                                                            triggerVibe(CalcKey.Digit("0"))
+                                                            viewModel.storeVariable(name, viewModel.expression.value)
+                                                        },
+                                                        contentPadding = PaddingValues(horizontal = 4.dp)
+                                                    ) {
+                                                        Text("STO", fontSize = 11.sp, color = functionalTextColor)
+                                                    }
+
+                                                    // RCL click registers symbol to screen
+                                                    TextButton(
+                                                        onClick = {
+                                                            triggerVibe(CalcKey.Digit("0"))
+                                                            viewModel.onDigitClick(name)
+                                                            showHistory = false
+                                                        },
+                                                        contentPadding = PaddingValues(horizontal = 4.dp)
+                                                    ) {
+                                                        Text("RCL", fontSize = 11.sp, color = operatorColor)
+                                                    }
+
+                                                    if (!isPredefined) {
+                                                        IconButton(
+                                                            onClick = {
+                                                                triggerVibe(CalcKey.Backspace)
+                                                                viewModel.removeVariable(name)
+                                                            },
+                                                            modifier = Modifier.size(24.dp)
+                                                        ) {
+                                                            Icon(
+                                                                Icons.Default.Delete,
+                                                                contentDescription = "Delete variable",
+                                                                tint = Color(0xFFDC2626),
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = { viewModel.clearVariables() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = actionColor),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("Reset Predefined Vars", color = functionalTextColor, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
                     }
                 }
             }
+        }
+
+        // 2D Canvas Function Grapher Plotter Modal
+        if (showGrapherDialog) {
+            FunctionGrapherDialog(
+                angleMode = angleMode,
+                onDismiss = { showGrapherDialog = false }
+            )
+        }
+
+        // Dynamic Palette Selection Modal
+        if (showThemeDialog) {
+            ThemePickerDialog(
+                currentTheme = currentTheme,
+                onSelectTheme = { currentTheme = it },
+                onDismiss = { showThemeDialog = false }
+            )
         }
 
         // Solver Input Dialog Sheet
@@ -675,7 +1065,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel()) {
 }
 
 @Composable
-fun RibbonButton(label: String, onClick: () -> Unit) {
+fun RibbonButton(theme: CalcTheme, label: String, onClick: () -> Unit) {
     val haptic = LocalHapticFeedback.current
     Surface(
         modifier = Modifier
@@ -683,14 +1073,14 @@ fun RibbonButton(label: String, onClick: () -> Unit) {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onClick()
             },
-        color = Color(0xFFD3E0EA),
+        color = theme.darkSurfaceColor,
         shape = RoundedCornerShape(8.dp)
     ) {
         Text(
             text = label,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF1E40AF),
+            color = theme.operatorColor,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
         )
     }
@@ -1104,6 +1494,326 @@ fun ConversionDialog(
         dismissButton = {
             TextButton(onClick = dismissWithKeyboard) {
                 Text("Close", color = Color(0xFF1E40AF))
+            }
+        },
+        containerColor = Color.White
+    )
+}
+
+@Composable
+fun ThemePickerDialog(
+    currentTheme: CalcTheme,
+    onSelectTheme: (CalcTheme) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Select Theme Palette", fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                ThemesList.forEach { theme ->
+                    val isSelected = theme.id == currentTheme.id
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelectTheme(theme) },
+                        shape = RoundedCornerShape(12.dp),
+                        border = if (isSelected) BorderStroke(2.dp, theme.operatorColor) else null,
+                        colors = CardDefaults.cardColors(containerColor = theme.backgroundColor)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = theme.name,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = theme.expressionTextColor
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(modifier = Modifier.size(16.dp).background(theme.operatorColor, CircleShape))
+                                Box(modifier = Modifier.size(16.dp).background(theme.actionColor, CircleShape))
+                                Box(modifier = Modifier.size(16.dp).background(theme.digitColor, CircleShape))
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E40AF))) {
+                Text("Done", color = Color.White)
+            }
+        },
+        containerColor = Color.White
+    )
+}
+
+@Composable
+fun FunctionGrapherDialog(
+    angleMode: String,
+    onDismiss: () -> Unit
+) {
+    var formula by remember { mutableStateOf("sin(x) * x") }
+    var xMinStr by remember { mutableStateOf("-10") }
+    var xMaxStr by remember { mutableStateOf("10") }
+    var yMinStr by remember { mutableStateOf("-10") }
+    var yMaxStr by remember { mutableStateOf("10") }
+
+    val xMin = xMinStr.toDoubleOrNull() ?: -10.0
+    val xMax = xMaxStr.toDoubleOrNull() ?: 10.0
+    val yMin = yMinStr.toDoubleOrNull() ?: -10.0
+    val yMax = yMaxStr.toDoubleOrNull() ?: 10.0
+
+    val presets = listOf("sin(x) * x", "sin(x)", "cos(x)", "abs(x)", "x^2 - 4", "ln(x)", "sqrt(x)")
+
+    // Precompute graph points to avoid heavy parsing of 300 formula expressions inside the Canvas draw pass
+    val graphPoints = remember(formula, angleMode, xMin, xMax) {
+        val pointsList = mutableListOf<Pair<Double, Double>>()
+        if (xMax > xMin && formula.isNotBlank()) {
+            val steps = 300
+            val stepSize = (xMax - xMin) / steps
+            for (j in 0..steps) {
+                val xVal = xMin + j * stepSize
+                val yVal = try {
+                    val parser = CalculatorParser(formula, angleMode, mapOf("x" to xVal))
+                    parser.parse().toDouble()
+                } catch (e: Throwable) {
+                    Double.NaN
+                }
+                pointsList.add(Pair(xVal, yVal))
+            }
+        }
+        pointsList
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("2D Scientific Function Plotter", fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "Formula in terms of x:",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF475569)
+                )
+
+                OutlinedTextField(
+                    value = formula,
+                    onValueChange = { formula = it },
+                    singleLine = true,
+                    placeholder = { Text("e.g. sin(x) * x") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color(0xFF0F172A),
+                        unfocusedTextColor = Color(0xFF0F172A)
+                    )
+                )
+
+                // Quick presets
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(presets) { p ->
+                        Surface(
+                            onClick = { formula = p },
+                            color = Color(0xFFEFF6FF),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, Color(0xFFBFDBFE))
+                        ) {
+                            Text(
+                                text = p,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1E40AF),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Canvas screen plot
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .background(Color(0xFF090D16), RoundedCornerShape(12.dp))
+                        .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(12.dp))
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val gridColor = Color(0xFF475569)
+                        val axisLineColor = Color(0xFF94A3B8)
+                        val curveColor = Color(0xFF10B981) // Neon emerald
+
+                        val scaleX = { x: Double -> ((x - xMin) / (xMax - xMin) * size.width).toFloat() }
+                        val scaleY = { y: Double -> (size.height - (y - yMin) / (yMax - yMin) * size.height).toFloat() }
+
+                        // Horizontal lines
+                        if (yMax > yMin) {
+                            val step = max(1.0, (yMax - yMin) / 10.0)
+                            var curr = floor(yMin)
+                            while (curr <= ceil(yMax)) {
+                                if (curr != 0.0) {
+                                    val sy = scaleY(curr)
+                                    drawLine(
+                                        color = gridColor.copy(alpha = 0.25f),
+                                        start = Offset(0f, sy),
+                                        end = Offset(size.width, sy),
+                                        strokeWidth = 1.dp.toPx()
+                                    )
+                                }
+                                curr += step
+                            }
+                        }
+
+                        // Vertical lines
+                        if (xMax > xMin) {
+                            val step = max(1.0, (xMax - xMin) / 10.0)
+                            var curr = floor(xMin)
+                            while (curr <= ceil(xMax)) {
+                                if (curr != 0.0) {
+                                    val sx = scaleX(curr)
+                                    drawLine(
+                                        color = gridColor.copy(alpha = 0.25f),
+                                        start = Offset(sx, 0f),
+                                        end = Offset(sx, size.height),
+                                        strokeWidth = 1.dp.toPx()
+                                    )
+                                }
+                                curr += step
+                            }
+                        }
+
+                        // X axis
+                        val axisY = scaleY(0.0)
+                        if (axisY in 0f..size.height) {
+                            drawLine(
+                                color = axisLineColor,
+                                start = Offset(0f, axisY),
+                                end = Offset(size.width, axisY),
+                                strokeWidth = 2.dp.toPx()
+                            )
+                        }
+
+                        // Y axis
+                        val axisX = scaleX(0.0)
+                        if (axisX in 0f..size.width) {
+                            drawLine(
+                                color = axisLineColor,
+                                start = Offset(axisX, 0f),
+                                end = Offset(axisX, size.height),
+                                strokeWidth = 2.dp.toPx()
+                            )
+                        }
+
+                        // Draw Curve using precomputed points
+                        if (graphPoints.isNotEmpty() && xMax > xMin && yMax > yMin) {
+                            val curvePath = Path()
+                            var isFirstPoint = true
+                            
+                            for (point in graphPoints) {
+                                val xVal = point.first
+                                val yVal = point.second
+                                
+                                if (yVal.isFinite()) {
+                                    val sx = scaleX(xVal)
+                                    val sy = scaleY(yVal)
+                                    
+                                    if (sx in 0f..size.width && sy in 0f..size.height) {
+                                        if (isFirstPoint) {
+                                            curvePath.moveTo(sx, sy)
+                                            isFirstPoint = false
+                                        } else {
+                                            curvePath.lineTo(sx, sy)
+                                        }
+                                    } else {
+                                        isFirstPoint = true
+                                    }
+                                } else {
+                                    isFirstPoint = true
+                                }
+                            }
+                            
+                            drawPath(
+                                path = curvePath,
+                                color = curveColor,
+                                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Scale controls inputs
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = xMinStr,
+                        onValueChange = { xMinStr = it },
+                        label = { Text("xMin") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color(0xFF0F172A), unfocusedTextColor = Color(0xFF0F172A))
+                    )
+                    OutlinedTextField(
+                        value = xMaxStr,
+                        onValueChange = { xMaxStr = it },
+                        label = { Text("xMax") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color(0xFF0F172A), unfocusedTextColor = Color(0xFF0F172A))
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = yMinStr,
+                        onValueChange = { yMinStr = it },
+                        label = { Text("yMin") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color(0xFF0F172A), unfocusedTextColor = Color(0xFF0F172A))
+                    )
+                    OutlinedTextField(
+                        value = yMaxStr,
+                        onValueChange = { yMaxStr = it },
+                        label = { Text("yMax") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color(0xFF0F172A), unfocusedTextColor = Color(0xFF0F172A))
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E40AF))) {
+                Text("Close Plotter", color = Color.White)
             }
         },
         containerColor = Color.White

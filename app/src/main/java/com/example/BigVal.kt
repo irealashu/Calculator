@@ -79,6 +79,14 @@ class BigVal {
     fun isNaN(): Boolean = this.mantissa.isNaN()
 
     operator fun plus(other: BigVal): BigVal {
+        if (highPrecision && this.exponent == null && other.exponent == null) {
+            try {
+                val bd1 = java.math.BigDecimal(this.mantissa.toString())
+                val bd2 = java.math.BigDecimal(other.mantissa.toString())
+                val res = bd1.add(bd2, java.math.MathContext.DECIMAL128)
+                return BigVal(res.toDouble(), null)
+            } catch (e: Exception) {}
+        }
         if (this.mantissa == 0.0) return other
         if (other.mantissa == 0.0) return this
         if (this.mantissa.isInfinite() || other.mantissa.isInfinite()) {
@@ -108,6 +116,14 @@ class BigVal {
     }
 
     operator fun minus(other: BigVal): BigVal {
+        if (highPrecision && this.exponent == null && other.exponent == null) {
+            try {
+                val bd1 = java.math.BigDecimal(this.mantissa.toString())
+                val bd2 = java.math.BigDecimal(other.mantissa.toString())
+                val res = bd1.subtract(bd2, java.math.MathContext.DECIMAL128)
+                return BigVal(res.toDouble(), null)
+            } catch (e: Exception) {}
+        }
         if (other.mantissa == 0.0) return this
         if (this.mantissa == 0.0) return -other
         if (this.mantissa.isInfinite() || other.mantissa.isInfinite()) {
@@ -137,12 +153,35 @@ class BigVal {
     }
 
     operator fun times(other: BigVal): BigVal {
+        if (highPrecision && this.exponent == null && other.exponent == null) {
+            try {
+                val bd1 = java.math.BigDecimal(this.mantissa.toString())
+                val bd2 = java.math.BigDecimal(other.mantissa.toString())
+                val res = bd1.multiply(bd2, java.math.MathContext.DECIMAL128)
+                return BigVal(res.toDouble(), null)
+            } catch (e: Exception) {}
+        }
         if (this.mantissa == 0.0 || other.mantissa == 0.0) return BigVal(0.0)
         return BigVal(this.mantissa * other.mantissa, (this.exponent ?: BigVal(0.0)) + (other.exponent ?: BigVal(0.0)))
     }
 
     operator fun div(other: BigVal): BigVal {
         if (other.mantissa == 0.0) throw ArithmeticException("Divide by zero")
+        if (highPrecision && this.exponent == null && other.exponent == null) {
+            try {
+                val bd1 = java.math.BigDecimal(this.mantissa.toString())
+                val bd2 = java.math.BigDecimal(other.mantissa.toString())
+                val res = bd1.divide(bd2, java.math.MathContext.DECIMAL128)
+                return BigVal(res.toDouble(), null)
+            } catch (e: Exception) {
+                try {
+                    val bd1 = java.math.BigDecimal(this.mantissa.toString())
+                    val bd2 = java.math.BigDecimal(other.mantissa.toString())
+                    val res = bd1.divide(bd2, java.math.MathContext(34, java.math.RoundingMode.HALF_UP))
+                    return BigVal(res.toDouble(), null)
+                } catch (e2: Exception) {}
+            }
+        }
         return BigVal(this.mantissa / other.mantissa, (this.exponent ?: BigVal(0.0)) - (other.exponent ?: BigVal(0.0)))
     }
 
@@ -334,9 +373,21 @@ class BigVal {
         
         // If exponent is in reasonable display range, format as a regular decimal
         if (expB.exponent == null && expD.isFinite() && expD >= -4.0 && expD < 1e15) {
-            val d = toDouble()
-            return if (d == d.toLong().toDouble()) {
-                d.toLong().toString()
+            var d = toDouble()
+            
+            // Clean up float representation noise for near integers or clean decimals
+            val roundedLong = round(d)
+            if (abs(d - roundedLong) < 1e-10) {
+                d = roundedLong
+            } else {
+                val rounded12 = round(d * 1e12) / 1e12
+                if (abs(d - rounded12) < 1e-14) {
+                    d = rounded12
+                }
+            }
+
+            if (d == d.toLong().toDouble()) {
+                return d.toLong().toString()
             } else {
                 val formatted = String.format(Locale.US, "%.10f", d)
                 var end = formatted.length - 1
@@ -346,15 +397,26 @@ class BigVal {
                 if (formatted[end] == '.') {
                     end--
                 }
-                formatted.substring(0, end + 1)
+                return formatted.substring(0, end + 1)
             }
         }
         
         // Format as scientific notation
-        val formattedM = if (this.mantissa == this.mantissa.toLong().toDouble()) {
-            this.mantissa.toLong().toString()
+        var mVal = this.mantissa
+        val roundedM = round(mVal)
+        if (abs(mVal - roundedM) < 1e-10) {
+            mVal = roundedM
         } else {
-            val formatted = String.format(Locale.US, "%.5f", this.mantissa)
+            val rounded12 = round(mVal * 1e12) / 1e12
+            if (abs(mVal - rounded12) < 1e-14) {
+                mVal = rounded12
+            }
+        }
+
+        val formattedM = if (mVal == mVal.toLong().toDouble()) {
+            mVal.toLong().toString()
+        } else {
+            val formatted = String.format(Locale.US, "%.5f", mVal)
             var end = formatted.length - 1
             while (end > 0 && formatted[end] == '0') {
                 end--
@@ -373,5 +435,9 @@ class BigVal {
             return "10^$eStr"
         }
         return "${formattedM}×10^$eStr"
+    }
+
+    companion object {
+        var highPrecision = false
     }
 }

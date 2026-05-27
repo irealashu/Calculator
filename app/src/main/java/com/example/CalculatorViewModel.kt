@@ -43,6 +43,9 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private val _isHighPrecision = MutableStateFlow(false)
+    val isHighPrecision: StateFlow<Boolean> = _isHighPrecision.asStateFlow()
+
     // Scientific angle and base modes matching TI-36X Pro
     private val _angleMode = MutableStateFlow("DEG")
     val angleMode: StateFlow<String> = _angleMode.asStateFlow()
@@ -61,6 +64,12 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
 
     fun toggleScientific() {
         _isScientificExpanded.value = !_isScientificExpanded.value
+    }
+
+    fun toggleHighPrecision() {
+        _isHighPrecision.value = !_isHighPrecision.value
+        BigVal.highPrecision = _isHighPrecision.value
+        updatePreview()
     }
 
     fun toggleAngleMode() {
@@ -83,6 +92,13 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         val parsedVal = valueStr.toDoubleOrNull() ?: _previewResult.value.toDoubleOrNull() ?: _expression.value.toDoubleOrNull() ?: 0.0
         val currentVars = _variables.value.toMutableMap()
         currentVars[cleanName] = parsedVal
+        _variables.value = currentVars
+    }
+
+    fun removeVariable(name: String) {
+        val cleanName = name.lowercase()
+        val currentVars = _variables.value.toMutableMap()
+        currentVars.remove(cleanName)
         _variables.value = currentVars
     }
 
@@ -202,6 +218,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         if (currentExpr.isBlank()) return
 
         try {
+            BigVal.highPrecision = _isHighPrecision.value
             val compiled = CalculatorParser(currentExpr, _angleMode.value, _variables.value).parse()
             val formatted = formatResult(compiled)
             
@@ -213,7 +230,7 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             _expression.value = formatted
             _previewResult.value = ""
             _errorMessage.value = null
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             _errorMessage.value = e.message ?: "Format Error"
         }
     }
@@ -237,9 +254,10 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
             return
         }
         try {
+            BigVal.highPrecision = _isHighPrecision.value
             val compiled = CalculatorParser(currentExpr, _angleMode.value, _variables.value).parse()
             _previewResult.value = formatResult(compiled)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             _previewResult.value = ""
         }
     }

@@ -15,6 +15,20 @@ class ExampleUnitTest {
   }
 
   @Test
+  fun testAddOneAndTwo() {
+    val expr = "1 + 2"
+    val result = CalculatorParser(expr).parse()
+    assertEquals("3", result.toFormattedString())
+  }
+
+  @Test
+  fun testFactorialPrecision() {
+    val expr = "9!"
+    val result = CalculatorParser(expr).parse()
+    assertEquals("362880", result.toFormattedString())
+  }
+
+  @Test
   fun testLargeExponentiation() {
     val expr3 = "9^9^9"
     val result3 = CalculatorParser(expr3).parse()
