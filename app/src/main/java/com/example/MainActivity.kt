@@ -226,6 +226,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vib
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showSearchDialog by remember { mutableStateOf(false) }
     var showGrapherDialog by remember { mutableStateOf(false) }
+    var showHelpDialog by remember { mutableStateOf(false) }
 
     // Dialog/Form triggers
     var showSolverDialog by remember { mutableStateOf<String?>(null) } // "QUAD", "SYSTEM"
@@ -965,6 +966,46 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vib
                             ) {
                                 Text("Clear Memory Variables", color = Color.White, fontWeight = FontWeight.Bold)
                             }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            HorizontalDivider(color = expressionTextColor.copy(alpha = 0.12f), thickness = 1.dp)
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                "Support & Reference",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black,
+                                color = previewResultColor.copy(alpha = 0.7f),
+                                letterSpacing = 1.sp
+                            )
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(operatorColor)
+                                    .clickable {
+                                        triggerVibe(CalcKey.Digit("0"))
+                                        showHelpDialog = true
+                                        showNavMenu = false
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = operatorTextColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "Help & Guide Manual",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = operatorTextColor
+                                )
+                            }
                         }
                     }
                 }
@@ -1424,6 +1465,13 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vib
                 }
             )
         }
+
+        if (showHelpDialog) {
+            HelpManualDialog(
+                currentTheme = currentTheme,
+                onDismiss = { showHelpDialog = false }
+            )
+        }
     }
 }
 
@@ -1471,10 +1519,15 @@ fun AppTextField(
 ) {
     if (useAppDefaultKeyboard) {
         val isFocused = activeKeyboardInputTarget?.id == id
-        Box(
-            modifier = modifier.clickable {
-                onSetInputTarget(InputTarget(id, { value }, onValueChange))
+        if (isFocused) {
+            LaunchedEffect(value) {
+                if (activeKeyboardInputTarget?.valueGetter?.invoke() != value) {
+                    onSetInputTarget(InputTarget(id, { value }, onValueChange))
+                }
             }
+        }
+        Box(
+            modifier = modifier
         ) {
             OutlinedTextField(
                 value = value,
@@ -1490,6 +1543,14 @@ fun AppTextField(
                     disabledLabelColor = Color(0xFF64748B),
                     disabledPlaceholderColor = Color(0xFF94A3B8)
                 )
+            )
+            // Completely overlap input to capture touch clicks correctly
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable {
+                        onSetInputTarget(InputTarget(id, { value }, onValueChange))
+                    }
             )
         }
     } else {
@@ -5503,6 +5564,239 @@ fun WorksheetDialog(
 // Helper matrices and vectors generators for Worksheet logic above
 private fun WorksheetDialog_buildMatrix_cell(valStr: String): Double {
     return valStr.toDoubleOrNull() ?: 0.0
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HelpManualDialog(
+    currentTheme: CalcTheme,
+    onDismiss: () -> Unit
+) {
+    var selectedCategory by remember { mutableStateOf("Core") }
+    val categories = listOf(
+        "Core" to "Core Calc",
+        "Worksheets" to "Worksheets",
+        "Solvers" to "Solvers & Plot",
+        "Variables" to "Variables & Themes"
+    )
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Color.Black.copy(alpha = 0.4f) // Dimmed background backdrop
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth(0.95f)
+                        .fillMaxHeight(0.90f),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (currentTheme.isDark) Color(0xFF0F172A) else Color(0xFFF8FAFC)
+                    ),
+                    border = BorderStroke(1.5.dp, currentTheme.operatorColor.copy(alpha = 0.6f))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp)
+                    ) {
+                        // Header with custom icon and title
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = currentTheme.operatorColor,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Application Help & Reference",
+                                        fontSize = 17.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = if (currentTheme.isDark) Color.White else Color(0xFF0F172A)
+                                    )
+                                    Text(
+                                        text = "The complete guide to all mathematical engine features",
+                                        fontSize = 10.sp,
+                                        color = (if (currentTheme.isDark) Color.White else Color(0xFF0F172A)).copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                            IconButton(
+                                onClick = onDismiss,
+                                modifier = Modifier
+                                    .background(Color.Red.copy(alpha = 0.1f), CircleShape)
+                                    .size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close help dialog",
+                                    tint = Color.Red,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Beautiful scrolling category selector
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(categories) { pair ->
+                                val id = pair.first
+                                val label = pair.second
+                                val isSelected = selectedCategory == id
+                                Button(
+                                    onClick = { selectedCategory = id },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isSelected) currentTheme.operatorColor else currentTheme.actionColor,
+                                        contentColor = if (isSelected) currentTheme.operatorTextColor else currentTheme.functionalTextColor
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                    modifier = Modifier.height(36.dp)
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        HorizontalDivider(color = (if (currentTheme.isDark) Color.White else Color.Black).copy(alpha = 0.1f))
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Interactive main documentation content
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .background(
+                                    if (currentTheme.isDark) Color(0xFF1E293B) else Color(0xFFF1F5F9),
+                                    RoundedCornerShape(16.dp)
+                                )
+                                .padding(14.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState())
+                            ) {
+                                val textHeadingColor = if (currentTheme.isDark) Color.White else Color(0xFF0F172A)
+                                val textBodyColor = (if (currentTheme.isDark) Color.White else Color(0xFF1E293B)).copy(alpha = 0.8f)
+
+                                when (selectedCategory) {
+                                    "Core" -> {
+                                        HelpSectionHeader("1. Core Calculator & High Precision", textHeadingColor, currentTheme)
+                                        HelpItem("High-Precision Engine", "Toggle between standard Double-mode FLOAT64 and our arbitrary-point HIGH PREC. High-precision mode prevents float conversion noise during multi-step algebraic operations, limits, or integrals.", textBodyColor)
+                                        HelpItem("Active Workspace Keyboard", "Our app provides an specialized scientific input keyboard. Tap inputs directly or use System keyboards via Settings. Quick-injectors append parameters smoothly.", textBodyColor)
+                                        HelpItem("Real-time Graphing Canvas Integration", "Formulas entered cleanly in the main field can be drawn using our 2D plotter or quickly evaluated for custom results.", textBodyColor)
+                                    }
+                                    "Worksheets" -> {
+                                        HelpSectionHeader("2. Full-Screen Worksheets Studio", textHeadingColor, currentTheme)
+                                        HelpItem("Calculus & Limits Worksheet", "Let's user compute numerical derivatives, definite integrals, and exact endpoints limit approaches. Also outputs step-by-step calculus notations directly into the engine.", textBodyColor)
+                                        HelpItem("Linear Algebra Studio", "Complete support for 2x2 and 3x3 matrices. Compute inverse matrices row operations, determinants, products, as well as complex eigenvalues / eigenvectors.", textBodyColor)
+                                        HelpItem("Complex & DeMoivre's theorem", "Computes the absolute value, true phase angle (argument), powers, and consecutive root branches of imaginary numbers a + bi.", textBodyColor)
+                                        HelpItem("Linear Regression Studio", "Inputs coordinate lists & computes slopes, y-intercepts, and correlation levels r. Perfect for statistics modeling.", textBodyColor)
+                                        HelpItem("Special Functions & Stats Model", "Provides Gaussian bell probabilities, density levels, cumulative distributions, and custom Poisson limits.", textBodyColor)
+                                        HelpItem("Time Value of Money (TVM) Ledger", "Easily calculate Future / Present values, monthly payment installments, periods, and NPV cash flow entries.", textBodyColor)
+                                        HelpItem("Symbolic CAS Studio", "Instantly expand complicated algebraic products or factor high-degree polynomials dynamically.", textBodyColor)
+                                        HelpItem("Fraction & Decimal Converter", "Turns float decimals into accurate fractional ratios or repeating decimals for rigorous math representation.", textBodyColor)
+                                    }
+                                    "Solvers" -> {
+                                        HelpSectionHeader("3. Numerical Solvers, Plotters & Converts", textHeadingColor, currentTheme)
+                                        HelpItem("Quadratic Solver", "Calculates true complex or real solutions for equations looking like ax² + bx + c = 0.", textBodyColor)
+                                        HelpItem("2x2 Equation Systems", "Input row-wise coefficients and resolves simultaneous equations dynamically using Cramer's rule.", textBodyColor)
+                                        HelpItem("Scientific Unit Converter", "Convert dozens of properties for speed, mass, temperature, data rates, memory depth, area, and cubic volumes.", textBodyColor)
+                                        HelpItem("2D Canvas Function Grapher", "Plot complex functional formulas, trace coordinates with your fingers, change X/Y window boundaries, and view math trends recursively.", textBodyColor)
+                                    }
+                                    "Variables" -> {
+                                        HelpSectionHeader("4. Variables Memory & Display Styling", textHeadingColor, currentTheme)
+                                        HelpItem("Variable Memory (STO & RCL)", "Save your workspace numbers in custom slots (x, y, z, t, a, b, c, d). STO locks variables. RCL pulls them. Keeps expressions readable.", textBodyColor)
+                                        HelpItem("Expanded Interface & Plot Space", "Features an interactive screen area. Unnecessary status indicators are removed to maximize visual scanning and give room to complex formula outputs.", textBodyColor)
+                                        HelpItem("Custom Styling Themes", "Over 10 custom designed dynamic themes. Toggle gorgeous combinations including our newly introduced 'Material Yellow', 'Amber Sunset', and 'Velvet Orchid' themes via system settings.", textBodyColor)
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = onDismiss,
+                            colors = ButtonDefaults.buttonColors(containerColor = currentTheme.operatorColor),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "I Understand",
+                                color = currentTheme.operatorTextColor,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HelpSectionHeader(title: String, textColor: Color, theme: CalcTheme) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(4.dp, 16.dp)
+                .background(theme.operatorColor, RoundedCornerShape(2.dp))
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = title,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = textColor
+        )
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+}
+
+@Composable
+fun HelpItem(title: String, body: String, color: Color) {
+    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+        Text(
+            text = "• $title",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = body,
+            fontSize = 11.sp,
+            color = color.copy(alpha = 0.85f),
+            modifier = Modifier.padding(start = 12.dp)
+        )
+    }
 }
 
 
