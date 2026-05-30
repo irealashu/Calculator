@@ -52,6 +52,13 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusProperties
+import android.view.ViewGroup
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.ui.viewinterop.AndroidView
+import java.net.URLEncoder
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -116,6 +123,54 @@ val ThemesList = listOf(
         functionalTextColor = Color(0xFF1D4ED8)
     ),
     CalcTheme(
+        id = "material_yellow",
+        name = "Material Yellow",
+        isDark = false,
+        backgroundColor = Color(0xFFFEF253), // Modern energetic Material Yellow
+        darkSurfaceColor = Color(0xFFFDE047), // Sunny accent yellow
+        operatorColor = Color(0xFFEAB308), // Strong golden operator
+        actionColor = Color(0xFFFFFEE2), // Light comfortable background action card
+        digitColor = Color(0xFFFFFFFF),
+        clearColor = Color(0xFFF87171),
+        clearTextColor = Color(0xFFFFFFFF),
+        operatorTextColor = Color(0xFF3F2F00), // Dark contrasting operator text
+        expressionTextColor = Color(0xFF2C2200), // Darker text for visibility
+        previewResultColor = Color(0xFF715B00),
+        functionalTextColor = Color(0xFF854D0E)
+    ),
+    CalcTheme(
+        id = "amber_sunset",
+        name = "Amber Sunset",
+        isDark = true,
+        backgroundColor = Color(0xFF0F0E0A),
+        darkSurfaceColor = Color(0xFF1C1A14),
+        operatorColor = Color(0xFFD97706),
+        actionColor = Color(0xFF452B09),
+        digitColor = Color(0xFF1A1712),
+        clearColor = Color(0xFFEF4444),
+        clearTextColor = Color(0xFFFFFFFF),
+        operatorTextColor = Color(0xFFFFFFFF),
+        expressionTextColor = Color(0xFFFFF7ED),
+        previewResultColor = Color(0xFFFDE68A),
+        functionalTextColor = Color(0xFFF59E0B)
+    ),
+    CalcTheme(
+        id = "velvet_orchid",
+        name = "Velvet Orchid",
+        isDark = true,
+        backgroundColor = Color(0xFF0F0A15),
+        darkSurfaceColor = Color(0xFF1D1429),
+        operatorColor = Color(0xFF8B5CF6),
+        actionColor = Color(0xFF3B1D5F),
+        digitColor = Color(0xFF160F20),
+        clearColor = Color(0xFFF43F5E),
+        clearTextColor = Color(0xFFFFFFFF),
+        operatorTextColor = Color(0xFFFFFFFF),
+        expressionTextColor = Color(0xFFF5F3FF),
+        previewResultColor = Color(0xFFDDD6FE),
+        functionalTextColor = Color(0xFFA78BFA)
+    ),
+    CalcTheme(
         id = "midnight_forest",
         name = "Midnight Forest",
         isDark = true,
@@ -167,6 +222,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vib
     
     // Dynamic Theme state
     var currentTheme by remember { mutableStateOf(ThemesList[0]) }
+    var useAppDefaultKeyboard by remember { mutableStateOf(true) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showSearchDialog by remember { mutableStateOf(false) }
     var showGrapherDialog by remember { mutableStateOf(false) }
@@ -196,39 +252,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vib
 
     // Custom Weighted Vibrotactile Feedback Loop
     val triggerVibe = { keyType: CalcKey ->
-        if (vibrator != null) {
-            try {
-                val duration: Long
-                val amplitude: Int
-                when (keyType) {
-                    is CalcKey.Digit, is CalcKey.Parenthesis -> {
-                        duration = 10
-                        amplitude = 40 // subtle light digit click
-                    }
-                    is CalcKey.Operator -> {
-                        duration = 20
-                        amplitude = 110 // firm operator snap
-                    }
-                    is CalcKey.Equal -> {
-                        duration = 35
-                        amplitude = 170 // crisp action success snap
-                    }
-                    else -> {
-                        duration = 22
-                        amplitude = 135 // moderate action press
-                    }
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator.vibrate(VibrationEffect.createOneShot(duration, amplitude))
-                } else {
-                    vibrator.vibrate(duration)
-                }
-            } catch (e: Exception) {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            }
-        } else {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-        }
+        // All vibrations completely disabled per request
     }
 
     Box(
@@ -365,48 +389,11 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vib
                 }
             }
 
-            // Real-time scientific indicator status & Precision Mode Selector
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "VARS: [x=${String.format(Locale.US, "%.1f", variables["x"] ?: 0.0)}, y=${String.format(Locale.US, "%.1f", variables["y"] ?: 0.0)}]",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = previewResultColor.copy(alpha = 0.8f)
-                )
-
-                // High Precision decimal engine Toggle Switch
-                Button(
-                    onClick = {
-                        triggerVibe(CalcKey.Digit("0"))
-                        viewModel.toggleHighPrecision()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isHighPrecision) operatorColor else actionColor
-                    ),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.height(28.dp)
-                ) {
-                    Text(
-                        text = if (isHighPrecision) "DEC Mode: High Prec" else "DEC Mode: Float64",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = if (isHighPrecision) operatorTextColor else functionalTextColor
-                    )
-                }
-            }
-
             // Display expression panel
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1.0f)
+                    .weight(1.4f)
                     .clip(RoundedCornerShape(20.dp))
                     .background(if (currentTheme.isDark) Color(0xFF131920) else Color.White)
                     .border(1.5.dp, if (currentTheme.isDark) Color(0xFF374151) else Color(0xFFBFDBFE), RoundedCornerShape(20.dp))
@@ -1352,6 +1339,8 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vib
                 onToggleHighPrecision = { viewModel.toggleHighPrecision() },
                 onClearVariables = { viewModel.clearVariables() },
                 onClearHistory = { viewModel.clearHistory() },
+                useAppDefaultKeyboard = useAppDefaultKeyboard,
+                onToggleAppDefaultKeyboard = { useAppDefaultKeyboard = !useAppDefaultKeyboard },
                 onDismiss = { showSettingsDialog = false }
             )
         }
@@ -1395,6 +1384,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vib
         showSolverDialog?.let { type ->
             SolverDialog(
                 type = type,
+                useAppDefaultKeyboard = useAppDefaultKeyboard,
                 onDismiss = { showSolverDialog = null },
                 onSolveRealRoot = { rootResult ->
                     viewModel.onConstantClick(rootResult)
@@ -1426,6 +1416,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vib
         showWorksheetDialog?.let { type ->
             WorksheetDialog(
                 type = type,
+                useAppDefaultKeyboard = useAppDefaultKeyboard,
                 onDismiss = { showWorksheetDialog = null },
                 onInsertResult = { res ->
                     viewModel.onConstantClick(res)
@@ -1438,11 +1429,9 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vib
 
 @Composable
 fun RibbonButton(theme: CalcTheme, label: String, onClick: () -> Unit) {
-    val haptic = LocalHapticFeedback.current
     Surface(
         modifier = Modifier
             .clickable {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onClick()
             },
         color = theme.darkSurfaceColor,
@@ -1455,6 +1444,434 @@ fun RibbonButton(theme: CalcTheme, label: String, onClick: () -> Unit) {
             color = theme.operatorColor,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
         )
+    }
+}
+
+// -------------------------------------------------------------
+// APP CUSTOM NOTATION & SCIENTIFIC KEYBOARD EXTENSION ARCHITECTURE
+// -------------------------------------------------------------
+
+data class InputTarget(
+    val id: String,
+    val valueGetter: () -> String,
+    val onValueChange: (String) -> Unit
+)
+
+@Composable
+fun AppTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    id: String,
+    useAppDefaultKeyboard: Boolean,
+    activeKeyboardInputTarget: InputTarget?,
+    onSetInputTarget: (InputTarget?) -> Unit,
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = true
+) {
+    if (useAppDefaultKeyboard) {
+        val isFocused = activeKeyboardInputTarget?.id == id
+        Box(
+            modifier = modifier.clickable {
+                onSetInputTarget(InputTarget(id, { value }, onValueChange))
+            }
+        ) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = {}, // Disabled anyway, but keeps IDE happy
+                label = { Text(label) },
+                enabled = false,
+                singleLine = singleLine,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    disabledTextColor = Color(0xFF0F172A),
+                    disabledContainerColor = if (isFocused) Color(0xFFEDF2F8) else Color.White,
+                    disabledBorderColor = if (isFocused) Color(0xFF1E40AF) else Color(0xFFCBD5E1),
+                    disabledLabelColor = Color(0xFF64748B),
+                    disabledPlaceholderColor = Color(0xFF94A3B8)
+                )
+            )
+        }
+    } else {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text(label) },
+            modifier = modifier,
+            singleLine = singleLine,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color(0xFF0F172A),
+                unfocusedTextColor = Color(0xFF0F172A),
+                focusedContainerColor = Color.White,
+                unfocusedContainerColor = Color.White,
+                focusedBorderColor = Color(0xFF1E40AF),
+                unfocusedBorderColor = Color(0xFF94A3B8)
+            )
+        )
+    }
+}
+
+@Composable
+fun CustomNotationSymbolsKeypad(
+    target: InputTarget,
+    currentTheme: CalcTheme,
+    onCloseKeyboard: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var currentPage by remember { mutableStateOf(0) } // 0, 1, 2 for the three pages
+    var isShiftActive by remember { mutableStateOf(false) }
+
+    // Page configurations matching screenshots (not categorized, using ₹ for INR currency)
+    val pageRows = when (currentPage) {
+        0 -> listOf(
+            listOf("+", "-", "*", "/", "^", "=", "(", ")", "₹", "%"),
+            listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
+            listOf("PAGE", "[", "]", "{", "}", "<", ">", ",", ".", "∫")
+        )
+        1 -> listOf(
+            listOf("∀", "∃", "∪", "∩", "ℵ", "℘", "♀", "♂", "⊕", "⊗"),
+            listOf("δ", "ζ", "η", "κ", "ν", "ξ", "ρ", "υ", "χ", "ψ"),
+            listOf("PAGE", "Γ", "Θ", "Λ", "Ξ", "Π", "Υ", "Φ", "Ψ", "∞")
+        )
+        else -> listOf(
+            listOf("!", "?", "@", "#", "&", "|", ":", ";", "\"", "_"),
+            listOf("α", "β", "γ", "ε", "λ", "μ", "σ", "τ", "φ", "ω"),
+            listOf("PAGE", "Δ", "∇", "∂", "Å", "Ω", "†", "→", "⇌", "≈")
+        )
+    }
+
+    // Alphabet rows
+    val qwertyRow1 = listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p")
+    val qwertyRow2 = listOf("a", "s", "d", "f", "g", "h", "j", "k", "l")
+
+    // Keypad background color
+    val padBg = if (currentTheme.isDark) Color(0xFF1E293B) else Color(0xFFE9EDF0)
+    val btnColorNormal = if (currentTheme.isDark) Color(0xFF334155) else Color.White
+    val btnColorAlt = if (currentTheme.isDark) Color(0xFF475569) else Color(0xFFCBD5E1)
+    val keyTextColor = if (currentTheme.isDark) Color.White else Color(0xFF1E293B)
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        colors = CardDefaults.cardColors(containerColor = padBg),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(6.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Helper bar with input description & Close button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "INPUTTING TO: ",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = keyTextColor.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        text = target.id.uppercase(),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black,
+                        color = if (currentTheme.isDark) Color(0xFF60A5FA) else Color(0xFF1D4ED8)
+                    )
+                }
+                IconButton(
+                    onClick = onCloseKeyboard,
+                    modifier = Modifier.size(26.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close keyboard",
+                        tint = keyTextColor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            // Top rows from current page
+            pageRows.forEach { rowKeys ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    rowKeys.forEach { key ->
+                        val isPageToggle = key == "PAGE"
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(38.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isPageToggle) btnColorAlt else btnColorNormal)
+                                .clickable {
+                                    if (isPageToggle) {
+                                        currentPage = (currentPage + 1) % 3
+                                    } else {
+                                        val text = target.valueGetter()
+                                        target.onValueChange(text + key)
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isPageToggle) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Switch Page",
+                                    tint = keyTextColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            } else {
+                                Text(
+                                    text = key,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = keyTextColor
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // QWERTY ROW 1 (q-p)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                qwertyRow1.forEach { key ->
+                    val resolvedKey = if (isShiftActive) key.uppercase() else key
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(btnColorNormal)
+                            .clickable {
+                                val text = target.valueGetter()
+                                target.onValueChange(text + resolvedKey)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = resolvedKey,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = keyTextColor
+                        )
+                    }
+                }
+            }
+
+            // QWERTY ROW 2 (a-l)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                qwertyRow2.forEach { key ->
+                    val resolvedKey = if (isShiftActive) key.uppercase() else key
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(btnColorNormal)
+                            .clickable {
+                                val text = target.valueGetter()
+                                target.onValueChange(text + resolvedKey)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = resolvedKey,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = keyTextColor
+                        )
+                    }
+                }
+            }
+
+            // QWERTY ROW 3 (shift, letters, backspace)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Shift key
+                Box(
+                    modifier = Modifier
+                        .weight(1.5f)
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (isShiftActive) (if (currentTheme.isDark) Color(0xFF60A5FA) else Color(0xFF2563EB)) else btnColorAlt)
+                        .clickable { isShiftActive = !isShiftActive },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "▲",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isShiftActive) Color.White else keyTextColor
+                    )
+                }
+
+                listOf("z", "x", "c", "v", "b", "n", "m").forEach { key ->
+                    val resolvedKey = if (isShiftActive) key.uppercase() else key
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(btnColorNormal)
+                            .clickable {
+                                val text = target.valueGetter()
+                                target.onValueChange(text + resolvedKey)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = resolvedKey,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = keyTextColor
+                        )
+                    }
+                }
+
+                // Backspace key
+                Box(
+                    modifier = Modifier
+                        .weight(1.5f)
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(btnColorAlt)
+                        .clickable {
+                            val text = target.valueGetter()
+                            if (text.isNotEmpty()) {
+                                target.onValueChange(text.dropLast(1))
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "⌫",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = keyTextColor
+                    )
+                }
+            }
+
+            // QWERTY ROW 4 (layout chooser, info icon proxy, space, dot, GO)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Layout Switcher key .?123
+                Box(
+                    modifier = Modifier
+                        .weight(1.5f)
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(btnColorAlt)
+                        .clickable {
+                            currentPage = (currentPage + 1) % 3
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = ".?123",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = keyTextColor
+                    )
+                }
+
+                // Info icon proxy button
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(btnColorAlt),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = "Voice key proxy",
+                        tint = keyTextColor.copy(alpha = 0.5f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                // Large Spacebar key
+                Box(
+                    modifier = Modifier
+                        .weight(4.5f)
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(btnColorNormal)
+                        .clickable {
+                            val text = target.valueGetter()
+                            target.onValueChange(text + " ")
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Spacer(modifier = Modifier.fillMaxSize())
+                }
+
+                // Dot key
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(btnColorNormal)
+                        .clickable {
+                            val text = target.valueGetter()
+                            target.onValueChange(text + ".")
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = ".",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = keyTextColor
+                    )
+                }
+
+                // Orange GO key
+                Box(
+                    modifier = Modifier
+                        .weight(1.5f)
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFFF97316))
+                        .clickable {
+                            onCloseKeyboard()
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "GO",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -1510,6 +1927,7 @@ fun KeypadButton(
 @Composable
 fun SolverDialog(
     type: String,
+    useAppDefaultKeyboard: Boolean,
     onDismiss: () -> Unit,
     onSolveRealRoot: (String) -> Unit
 ) {
@@ -1536,6 +1954,8 @@ fun SolverDialog(
 
     var resultText by remember { mutableStateOf("") }
     var primaryRoot by remember { mutableStateOf("") }
+
+    var activeKeyboardInputTarget by remember { mutableStateOf<InputTarget?>(null) }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = Color(0xFF0F172A),
@@ -1596,56 +2016,74 @@ fun SolverDialog(
                     if (type == "QUAD") {
                         Text("Solves ax² + bx + c = 0", color = Color(0xFF475569), fontSize = 13.sp)
                         
-                        OutlinedTextField(
-                            value = a, onValueChange = { a = it }, label = { Text("Coefficient a") },
-                            colors = fieldColors,
+                        AppTextField(
+                            value = a, onValueChange = { a = it }, label = "Coefficient a", id = "coeff_a",
+                            useAppDefaultKeyboard = useAppDefaultKeyboard,
+                            activeKeyboardInputTarget = activeKeyboardInputTarget,
+                            onSetInputTarget = { activeKeyboardInputTarget = it },
                             modifier = Modifier.fillMaxWidth()
                         )
-                        OutlinedTextField(
-                            value = b, onValueChange = { b = it }, label = { Text("Coefficient b") },
-                            colors = fieldColors,
+                        AppTextField(
+                            value = b, onValueChange = { b = it }, label = "Coefficient b", id = "coeff_b",
+                            useAppDefaultKeyboard = useAppDefaultKeyboard,
+                            activeKeyboardInputTarget = activeKeyboardInputTarget,
+                            onSetInputTarget = { activeKeyboardInputTarget = it },
                             modifier = Modifier.fillMaxWidth()
                         )
-                        OutlinedTextField(
-                            value = c, onValueChange = { c = it }, label = { Text("Coefficient c") },
-                            colors = fieldColors,
+                        AppTextField(
+                            value = c, onValueChange = { c = it }, label = "Coefficient c", id = "coeff_c",
+                            useAppDefaultKeyboard = useAppDefaultKeyboard,
+                            activeKeyboardInputTarget = activeKeyboardInputTarget,
+                            onSetInputTarget = { activeKeyboardInputTarget = it },
                             modifier = Modifier.fillMaxWidth()
                         )
                     } else {
                         Text("Solves a1·x + b1·y = c1 and a2·x + b2·y = c2", color = Color(0xFF475569), fontSize = 13.sp)
                         
                         Text("Equation 1", fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                        OutlinedTextField(
-                            value = a1, onValueChange = { a1 = it }, label = { Text("a1") },
-                            colors = fieldColors,
+                        AppTextField(
+                            value = a1, onValueChange = { a1 = it }, label = "a1", id = "a1",
+                            useAppDefaultKeyboard = useAppDefaultKeyboard,
+                            activeKeyboardInputTarget = activeKeyboardInputTarget,
+                            onSetInputTarget = { activeKeyboardInputTarget = it },
                             modifier = Modifier.fillMaxWidth()
                         )
-                        OutlinedTextField(
-                            value = b1, onValueChange = { b1 = it }, label = { Text("b1") },
-                            colors = fieldColors,
+                        AppTextField(
+                            value = b1, onValueChange = { b1 = it }, label = "b1", id = "b1",
+                            useAppDefaultKeyboard = useAppDefaultKeyboard,
+                            activeKeyboardInputTarget = activeKeyboardInputTarget,
+                            onSetInputTarget = { activeKeyboardInputTarget = it },
                             modifier = Modifier.fillMaxWidth()
                         )
-                        OutlinedTextField(
-                            value = c1, onValueChange = { c1 = it }, label = { Text("c1") },
-                            colors = fieldColors,
+                        AppTextField(
+                            value = c1, onValueChange = { c1 = it }, label = "c1", id = "c1",
+                            useAppDefaultKeyboard = useAppDefaultKeyboard,
+                            activeKeyboardInputTarget = activeKeyboardInputTarget,
+                            onSetInputTarget = { activeKeyboardInputTarget = it },
                             modifier = Modifier.fillMaxWidth()
                         )
 
                         Spacer(modifier = Modifier.height(4.dp))
                         Text("Equation 2", fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                        OutlinedTextField(
-                            value = a2, onValueChange = { a2 = it }, label = { Text("a2") },
-                            colors = fieldColors,
+                        AppTextField(
+                            value = a2, onValueChange = { a2 = it }, label = "a2", id = "a2",
+                            useAppDefaultKeyboard = useAppDefaultKeyboard,
+                            activeKeyboardInputTarget = activeKeyboardInputTarget,
+                            onSetInputTarget = { activeKeyboardInputTarget = it },
                             modifier = Modifier.fillMaxWidth()
                         )
-                        OutlinedTextField(
-                            value = b2, onValueChange = { b2 = it }, label = { Text("b2") },
-                            colors = fieldColors,
+                        AppTextField(
+                            value = b2, onValueChange = { b2 = it }, label = "b2", id = "b2",
+                            useAppDefaultKeyboard = useAppDefaultKeyboard,
+                            activeKeyboardInputTarget = activeKeyboardInputTarget,
+                            onSetInputTarget = { activeKeyboardInputTarget = it },
                             modifier = Modifier.fillMaxWidth()
                         )
-                        OutlinedTextField(
-                            value = c2, onValueChange = { c2 = it }, label = { Text("c2") },
-                            colors = fieldColors,
+                        AppTextField(
+                            value = c2, onValueChange = { c2 = it }, label = "c2", id = "c2",
+                            useAppDefaultKeyboard = useAppDefaultKeyboard,
+                            activeKeyboardInputTarget = activeKeyboardInputTarget,
+                            onSetInputTarget = { activeKeyboardInputTarget = it },
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -1750,6 +2188,17 @@ fun SolverDialog(
                     ) {
                         Text("Close Solver", color = Color.White, fontWeight = FontWeight.Bold)
                     }
+                }
+
+                if (useAppDefaultKeyboard && activeKeyboardInputTarget != null) {
+                    CustomNotationSymbolsKeypad(
+                        target = activeKeyboardInputTarget!!,
+                        currentTheme = ThemesList[0],
+                        onCloseKeyboard = {
+                            activeKeyboardInputTarget = null
+                            focusManager.clearFocus(force = true)
+                        }
+                    )
                 }
             }
         }
@@ -2828,6 +3277,8 @@ fun SettingsDialog(
     onToggleHighPrecision: () -> Unit,
     onClearVariables: () -> Unit,
     onClearHistory: () -> Unit,
+    useAppDefaultKeyboard: Boolean,
+    onToggleAppDefaultKeyboard: () -> Unit,
     onDismiss: () -> Unit
 ) {
     Dialog(
@@ -3034,6 +3485,51 @@ fun SettingsDialog(
                                     Text(
                                         text = if (isHighPrecision) "HIGH PREC" else "FLOAT64",
                                         color = if (isHighPrecision) currentTheme.operatorTextColor else currentTheme.functionalTextColor,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
+                            }
+                        }
+
+                        // App Default Keypad / Keyboard Mode configuration setting
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, currentTheme.labelColor.copy(alpha = 0.08f)),
+                            colors = CardDefaults.cardColors(containerColor = currentTheme.actionColor.copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Default Workspace Keyboard",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = currentTheme.labelColor
+                                    )
+                                    Text(
+                                        text = "Switch between standard device system or app symbols keypad",
+                                        fontSize = 11.sp,
+                                        color = currentTheme.labelColor.copy(alpha = 0.6f)
+                                    )
+                                }
+                                Button(
+                                    onClick = onToggleAppDefaultKeyboard,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (useAppDefaultKeyboard) currentTheme.operatorColor else currentTheme.actionColor
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                    border = if (!useAppDefaultKeyboard) BorderStroke(1.dp, currentTheme.functionalTextColor.copy(alpha = 0.3f)) else null
+                                ) {
+                                    Text(
+                                        text = if (useAppDefaultKeyboard) "APP KEYPAD" else "SYSTEM QWERTY",
+                                        color = if (useAppDefaultKeyboard) currentTheme.operatorTextColor else currentTheme.functionalTextColor,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.ExtraBold
                                     )
@@ -4214,6 +4710,7 @@ fun FunctionGrapherDialog(
 @Composable
 fun WorksheetDialog(
     type: String,
+    useAppDefaultKeyboard: Boolean,
     onDismiss: () -> Unit,
     onInsertResult: (String) -> Unit
 ) {
@@ -4225,6 +4722,8 @@ fun WorksheetDialog(
         focusManager.clearFocus(force = true)
         onDismiss()
     }
+
+    var activeKeyboardInputTarget by remember { mutableStateOf<InputTarget?>(null) }
 
     // Worksheet States
     var calExpr by remember { mutableStateOf("x^2 - 3*x + 2") }
@@ -4381,11 +4880,34 @@ fun WorksheetDialog(
                     when(type) {
                     "calculus" -> {
                         Text("Compute analysis operations on your formula:", color = Color(0xFF475569), fontSize = 12.sp)
-                        OutlinedTextField(value = calExpr, onValueChange = { calExpr = it }, label = { Text("Formula f(x)") }, colors = fieldColors)
+                        AppTextField(
+                            value = calExpr, onValueChange = { calExpr = it }, label = "Formula f(x)", id = "calExpr",
+                            useAppDefaultKeyboard = useAppDefaultKeyboard,
+                            activeKeyboardInputTarget = activeKeyboardInputTarget,
+                            onSetInputTarget = { activeKeyboardInputTarget = it }
+                        )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(value = calX, onValueChange = { calX = it }, label = { Text("x point") }, modifier = Modifier.weight(1f), colors = fieldColors)
-                            OutlinedTextField(value = calA, onValueChange = { calA = it }, label = { Text("Bound a") }, modifier = Modifier.weight(1f), colors = fieldColors)
-                            OutlinedTextField(value = calB, onValueChange = { calB = it }, label = { Text("Bound b") }, modifier = Modifier.weight(1f), colors = fieldColors)
+                            AppTextField(
+                                value = calX, onValueChange = { calX = it }, label = "x point", id = "calX",
+                                useAppDefaultKeyboard = useAppDefaultKeyboard,
+                                activeKeyboardInputTarget = activeKeyboardInputTarget,
+                                onSetInputTarget = { activeKeyboardInputTarget = it },
+                                modifier = Modifier.weight(1f)
+                            )
+                            AppTextField(
+                                value = calA, onValueChange = { calA = it }, label = "Bound a", id = "calA",
+                                useAppDefaultKeyboard = useAppDefaultKeyboard,
+                                activeKeyboardInputTarget = activeKeyboardInputTarget,
+                                onSetInputTarget = { activeKeyboardInputTarget = it },
+                                modifier = Modifier.weight(1f)
+                            )
+                            AppTextField(
+                                value = calB, onValueChange = { calB = it }, label = "Bound b", id = "calB",
+                                useAppDefaultKeyboard = useAppDefaultKeyboard,
+                                activeKeyboardInputTarget = activeKeyboardInputTarget,
+                                onSetInputTarget = { activeKeyboardInputTarget = it },
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                         
                         // Action buttons
@@ -4460,19 +4982,19 @@ fun WorksheetDialog(
                         Text("Matrix Input (3x3 default, empty cells use 0):", color = Color(0xFF475569), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                OutlinedTextField(value = m00, onValueChange = { m00 = it }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
-                                OutlinedTextField(value = m01, onValueChange = { m01 = it }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
-                                OutlinedTextField(value = m02, onValueChange = { m02 = it }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
+                                AppTextField(value = m00, onValueChange = { m00 = it }, id = "m00", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), label = "m00", singleLine = true)
+                                AppTextField(value = m01, onValueChange = { m01 = it }, id = "m01", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), label = "m01", singleLine = true)
+                                AppTextField(value = m02, onValueChange = { m02 = it }, id = "m02", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), label = "m02", singleLine = true)
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                OutlinedTextField(value = m10, onValueChange = { m10 = it }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
-                                OutlinedTextField(value = m11, onValueChange = { m11 = it }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
-                                OutlinedTextField(value = m12, onValueChange = { m12 = it }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
+                                AppTextField(value = m10, onValueChange = { m10 = it }, id = "m10", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), label = "m10", singleLine = true)
+                                AppTextField(value = m11, onValueChange = { m11 = it }, id = "m11", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), label = "m11", singleLine = true)
+                                AppTextField(value = m12, onValueChange = { m12 = it }, id = "m12", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), label = "m12", singleLine = true)
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                OutlinedTextField(value = m20, onValueChange = { m20 = it }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
-                                OutlinedTextField(value = m21, onValueChange = { m21 = it }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
-                                OutlinedTextField(value = m22, onValueChange = { m22 = it }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
+                                AppTextField(value = m20, onValueChange = { m20 = it }, id = "m20", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), label = "m20", singleLine = true)
+                                AppTextField(value = m21, onValueChange = { m21 = it }, id = "m21", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), label = "m21", singleLine = true)
+                                AppTextField(value = m22, onValueChange = { m22 = it }, id = "m22", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), label = "m22", singleLine = true)
                             }
                         }
 
@@ -4532,14 +5054,14 @@ fun WorksheetDialog(
                         Spacer(modifier = Modifier.height(6.dp))
                         Text("Vectors Studio (3D):", color = Color(0xFF475569), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            OutlinedTextField(value = vec1x, onValueChange = { vec1x = it }, label = { Text("V1.x") }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
-                            OutlinedTextField(value = vec1y, onValueChange = { vec1y = it }, label = { Text("V1.y") }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
-                            OutlinedTextField(value = vec1z, onValueChange = { vec1z = it }, label = { Text("V1.z") }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
+                            AppTextField(value = vec1x, onValueChange = { vec1x = it }, label = "V1.x", id = "vec1x", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), singleLine = true)
+                            AppTextField(value = vec1y, onValueChange = { vec1y = it }, label = "V1.y", id = "vec1y", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), singleLine = true)
+                            AppTextField(value = vec1z, onValueChange = { vec1z = it }, label = "V1.z", id = "vec1z", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), singleLine = true)
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            OutlinedTextField(value = vec2x, onValueChange = { vec2x = it }, label = { Text("V2.x") }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
-                            OutlinedTextField(value = vec2y, onValueChange = { vec2y = it }, label = { Text("V2.y") }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
-                            OutlinedTextField(value = vec2z, onValueChange = { vec2z = it }, label = { Text("V2.z") }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
+                            AppTextField(value = vec2x, onValueChange = { vec2x = it }, label = "V2.x", id = "vec2x", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), singleLine = true)
+                            AppTextField(value = vec2y, onValueChange = { vec2y = it }, label = "V2.y", id = "vec2y", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), singleLine = true)
+                            AppTextField(value = vec2z, onValueChange = { vec2z = it }, label = "V2.z", id = "vec2z", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), singleLine = true)
                         }
 
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
@@ -4590,8 +5112,8 @@ fun WorksheetDialog(
                     "complex" -> {
                         Text("Complex Values (Cartesian & Polar):", color = Color(0xFF475569), fontSize = 12.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            OutlinedTextField(value = compReal, onValueChange = { compReal = it }, label = { Text("Real (a)") }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
-                            OutlinedTextField(value = compImag, onValueChange = { compImag = it }, label = { Text("Imag (b)") }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
+                            AppTextField(value = compReal, onValueChange = { compReal = it }, label = "Real (a)", id = "compReal", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), singleLine = true)
+                            AppTextField(value = compImag, onValueChange = { compImag = it }, label = "Imag (b)", id = "compImag", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), singleLine = true)
                         }
                         
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
@@ -4658,23 +5180,29 @@ fun WorksheetDialog(
                             }
                         }
 
-                        OutlinedTextField(value = compPower, onValueChange = { compPower = it }, label = { Text("Power exponent p") }, colors = fieldColors, singleLine = true)
+                        AppTextField(value = compPower, onValueChange = { compPower = it }, label = "Power exponent p", id = "compPower", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, singleLine = true)
                     }
 
                     "regression" -> {
                         Text("Calculate slope, intercept, and correlation coefficient (r) using linear regression:", color = Color(0xFF475569), fontSize = 13.sp)
-                        OutlinedTextField(
+                        AppTextField(
                             value = regXList,
                             onValueChange = { regXList = it },
-                            label = { Text("X Values (separated by commas, spaces, or semicolons)") },
-                            colors = fieldColors,
+                            label = "X Values (separated by commas, spaces, or semicolons)",
+                            id = "regXList",
+                            useAppDefaultKeyboard = useAppDefaultKeyboard,
+                            activeKeyboardInputTarget = activeKeyboardInputTarget,
+                            onSetInputTarget = { activeKeyboardInputTarget = it },
                             modifier = Modifier.fillMaxWidth()
                         )
-                        OutlinedTextField(
+                        AppTextField(
                             value = regYList,
                             onValueChange = { regYList = it },
-                            label = { Text("Y Values (separated by commas, spaces, or semicolons)") },
-                            colors = fieldColors,
+                            label = "Y Values (separated by commas, spaces, or semicolons)",
+                            id = "regYList",
+                            useAppDefaultKeyboard = useAppDefaultKeyboard,
+                            activeKeyboardInputTarget = activeKeyboardInputTarget,
+                            onSetInputTarget = { activeKeyboardInputTarget = it },
                             modifier = Modifier.fillMaxWidth()
                         )
                         
@@ -4733,7 +5261,7 @@ fun WorksheetDialog(
 
                     "special" -> {
                         Text("Bessel, Gamma & Statistics Engines:", color = Color(0xFF475569), fontSize = 12.sp)
-                        OutlinedTextField(value = specX, onValueChange = { specX = it }, label = { Text("Input Variable x") }, colors = fieldColors, singleLine = true)
+                        AppTextField(value = specX, onValueChange = { specX = it }, label = "Input Variable x", id = "specX", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, singleLine = true)
                         
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                             Button(
@@ -4782,7 +5310,7 @@ fun WorksheetDialog(
 
                         Spacer(modifier = Modifier.height(4.dp))
                         Text("Statistical Grouped Dataset Analysis:", color = Color(0xFF475569), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        OutlinedTextField(value = statXList, onValueChange = { statXList = it }, label = { Text("Data items (comma separated)") }, colors = fieldColors)
+                        AppTextField(value = statXList, onValueChange = { statXList = it }, label = "Data items (comma separated)", id = "statXList", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it })
                         
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                             Button(
@@ -4816,18 +5344,18 @@ fun WorksheetDialog(
                                 Text("Linear Fit (X vs Y)", color = Color(0xFF1D4ED8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         }
-                        OutlinedTextField(value = statYList, onValueChange = { statYList = it }, label = { Text("Data items Y (for fit)") }, colors = fieldColors)
+                        AppTextField(value = statYList, onValueChange = { statYList = it }, label = "Data items Y (for fit)", id = "statYList", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it })
                     }
 
                     "finance" -> {
                         Text("TVM Input (Leave field blank, click calculate to solve):", color = Color(0xFF475569), fontSize = 12.sp)
-                        OutlinedTextField(value = tvmPV, onValueChange = { tvmPV = it }, label = { Text("Present Value (PV)") }, colors = fieldColors, singleLine = true)
-                        OutlinedTextField(value = tvmFV, onValueChange = { tvmFV = it }, label = { Text("Future Value (FV)") }, colors = fieldColors, singleLine = true)
-                        OutlinedTextField(value = tvmPMT, onValueChange = { tvmPMT = it }, label = { Text("Periodic PMT") }, colors = fieldColors, singleLine = true)
+                        AppTextField(value = tvmPV, onValueChange = { tvmPV = it }, label = "Present Value (PV)", id = "tvmPV", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, singleLine = true)
+                        AppTextField(value = tvmFV, onValueChange = { tvmFV = it }, label = "Future Value (FV)", id = "tvmFV", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, singleLine = true)
+                        AppTextField(value = tvmPMT, onValueChange = { tvmPMT = it }, label = "Periodic PMT", id = "tvmPMT", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, singleLine = true)
                         
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            OutlinedTextField(value = tvmRate, onValueChange = { tvmRate = it }, label = { Text("Rate I/Y %") }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
-                            OutlinedTextField(value = tvmN, onValueChange = { tvmN = it }, label = { Text("Periods (N)") }, modifier = Modifier.weight(1f), colors = fieldColors, singleLine = true)
+                            AppTextField(value = tvmRate, onValueChange = { tvmRate = it }, label = "Rate I/Y %", id = "tvmRate", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), singleLine = true)
+                            AppTextField(value = tvmN, onValueChange = { tvmN = it }, label = "Periods (N)", id = "tvmN", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, modifier = Modifier.weight(1f), singleLine = true)
                         }
 
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
@@ -4868,7 +5396,7 @@ fun WorksheetDialog(
 
                         Spacer(modifier = Modifier.height(4.dp))
                         Text("NPV Cashflow Series Ledger:", color = Color(0xFF475569), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        OutlinedTextField(value = financeCFs, onValueChange = { financeCFs = it }, label = { Text("Periodic Flows (e.g. 100, 200, ...)") }, colors = fieldColors)
+                        AppTextField(value = financeCFs, onValueChange = { financeCFs = it }, label = "Periodic Flows (e.g. 100, 200, ...)", id = "financeCFs", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it })
                         
                         Button(
                             onClick = {
@@ -4888,8 +5416,8 @@ fun WorksheetDialog(
 
                     "cas" -> {
                         Text("Symbolic Expansion Generator:", color = Color(0xFF475569), fontSize = 12.sp)
-                        OutlinedTextField(value = casTerm1, onValueChange = { casTerm1 = it }, label = { Text("Factor Term 1") }, colors = fieldColors, singleLine = true)
-                        OutlinedTextField(value = casTerm2, onValueChange = { casTerm2 = it }, label = { Text("Factor Term 2") }, colors = fieldColors, singleLine = true)
+                        AppTextField(value = casTerm1, onValueChange = { casTerm1 = it }, label = "Factor Term 1", id = "casTerm1", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, singleLine = true)
+                        AppTextField(value = casTerm2, onValueChange = { casTerm2 = it }, label = "Factor Term 2", id = "casTerm2", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, singleLine = true)
                         
                         Button(
                             onClick = {
@@ -4906,7 +5434,7 @@ fun WorksheetDialog(
 
                     "fraction" -> {
                         Text("Fraction Precision Engine & Repeating Loops:", color = Color(0xFF475569), fontSize = 12.sp)
-                        OutlinedTextField(value = fracDec, onValueChange = { fracDec = it }, label = { Text("Decimal value to convert") }, colors = fieldColors, singleLine = true)
+                        AppTextField(value = fracDec, onValueChange = { fracDec = it }, label = "Decimal value to convert", id = "fracDec", useAppDefaultKeyboard = useAppDefaultKeyboard, activeKeyboardInputTarget = activeKeyboardInputTarget, onSetInputTarget = { activeKeyboardInputTarget = it }, singleLine = true)
                         
                         Button(
                             onClick = {
@@ -4956,6 +5484,17 @@ fun WorksheetDialog(
                         Text("Close Worksheet", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
+
+                if (useAppDefaultKeyboard && activeKeyboardInputTarget != null) {
+                    CustomNotationSymbolsKeypad(
+                        target = activeKeyboardInputTarget!!,
+                        currentTheme = ThemesList[0],
+                        onCloseKeyboard = {
+                            activeKeyboardInputTarget = null
+                            focusManager.clearFocus(force = true)
+                        }
+                    )
+                }
             }
         }
     }
@@ -4965,4 +5504,6 @@ fun WorksheetDialog(
 private fun WorksheetDialog_buildMatrix_cell(valStr: String): Double {
     return valStr.toDoubleOrNull() ?: 0.0
 }
+
+
 

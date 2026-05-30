@@ -377,11 +377,11 @@ class BigVal {
             
             // Clean up float representation noise for near integers or clean decimals
             val roundedLong = round(d)
-            if (abs(d - roundedLong) < 1e-10) {
+            if (abs(d - roundedLong) < 1e-9) {
                 d = roundedLong
             } else {
                 val rounded12 = round(d * 1e12) / 1e12
-                if (abs(d - rounded12) < 1e-14) {
+                if (abs(d - rounded12) < 1e-9) {
                     d = rounded12
                 }
             }

@@ -60,31 +60,52 @@ data class Fraction(val num: Long, val den: Long) {
             if (d.isInfinite() || d.isNaN()) throw IllegalArgumentException("Invalid float")
             val sign = if (d < 0) -1 else 1
             val value = abs(d)
-            
-            var m00 = 1L
-            var m01 = 0L
-            var m10 = 0L
-            var m11 = 1L
-            
-            var x = value
-            var a = floor(x).toLong()
-            while (x - a > 1e-12) {
-                val nextM00 = m00 * a + m01
-                val nextM10 = m10 * a + m11
-                if (nextM10 > maxDen) break
-                
-                m01 = m00
-                m00 = nextM00
-                m11 = m10
-                m10 = nextM10
-                
-                if (abs(x - a) < 1e-12) break
-                x = 1.0 / (x - a)
-                a = floor(x).toLong()
+            if (value > maxDen) {
+                return Fraction(value.toLong() * sign, 1L)
             }
-            val num = m00 * a + m01
-            val den = m10 * a + m11
-            return Fraction(num * sign, den).simplify()
+            
+            val h1 = floor(value).toLong()
+            var h = h1
+            var k = 1L
+            
+            var h2 = 1L
+            var k2 = 0L
+            
+            var x = value - h1
+            if (x < 1e-12) {
+                return Fraction(h * sign, k)
+            }
+            
+            var iterations = 0
+            while (x > 1e-12 && iterations < 100) {
+                iterations++
+                val nextVal = 1.0 / x
+                if (nextVal.isInfinite() || nextVal.isNaN()) break
+                val a = floor(nextVal).toLong()
+                if (a < 0L) break
+                
+                val prevH = h
+                val prevK = k
+                
+                // Safe check for overflow before multiplication
+                val checkH = if (a != 0L && h > Long.MAX_VALUE / a) Long.MAX_VALUE else a * h + h2
+                val checkK = if (a != 0L && k > Long.MAX_VALUE / a) Long.MAX_VALUE else a * k + k2
+                
+                if (checkK > maxDen || checkK < 0L || checkH < 0L) {
+                    break
+                }
+                
+                h = checkH
+                k = checkK
+                
+                h2 = prevH
+                k2 = prevK
+                
+                val nextDiff = nextVal - a
+                if (nextDiff == 0.0) break
+                x = nextDiff
+            }
+            return Fraction(h * sign, k).simplify()
         }
     }
 }
@@ -106,7 +127,9 @@ fun toRepeatingDecimal(d: Double): String {
     var r = rem
     var cycleStart = -1
     
-    while (r != 0L) {
+    var iterations = 0
+    while (r != 0L && iterations < 1000) {
+        iterations++
         if (seenRemainders.containsKey(r)) {
             cycleStart = seenRemainders[r]!!
             break
@@ -426,7 +449,7 @@ class Matrix(val data: Array<DoubleArray>) {
     private fun solveDeterminant(mat: Array<DoubleArray>): Double {
         val n = mat.size
         if (n == 1) return mat[0][0]
-        if (n == 2) return mat[0][0] * mat[1][1] - mat[0][1] * mat[1][2] // standard 2x2 formula
+        if (n == 2) return mat[0][0] * mat[1][1] - mat[0][1] * mat[1][0] // standard 2x2 formula
         
         var det = 0.0
         for (j in 0 until n) {
