@@ -1512,16 +1512,16 @@ fun AppTextField(
     label: String,
     id: String,
     useAppDefaultKeyboard: Boolean,
-    activeKeyboardInputTarget: InputTarget?,
+    activeKeyboardInputTarget: InputTarget,
     onSetInputTarget: (InputTarget?) -> Unit,
     modifier: Modifier = Modifier,
     singleLine: Boolean = true
 ) {
     if (useAppDefaultKeyboard) {
-        val isFocused = activeKeyboardInputTarget?.id == id
+        val isFocused = activeKeyboardInputTarget.id == id
         if (isFocused) {
             LaunchedEffect(value) {
-                if (activeKeyboardInputTarget?.valueGetter?.invoke() != value) {
+                if (activeKeyboardInputTarget.valueGetter.invoke() != value) {
                     onSetInputTarget(InputTarget(id, { value }, onValueChange))
                 }
             }
