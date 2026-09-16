@@ -189,11 +189,13 @@ class BigVal {
         return BigVal(-this.mantissa, this.exponent)
     }
 
-    fun log10Val(): BigVal {
-        if (this.mantissa <= 0.0) throw IllegalArgumentException("Result is non-real")
-        val logM = log10(this.mantissa)
-        return BigVal(logM) + (this.exponent ?: BigVal(0.0))
-    }
+    private const val RESULT_NON_REAL_ERROR = "Result is non-real"
+
+        fun log10Val(): BigVal {
+            if (this.mantissa <= 0.0) throw IllegalArgumentException(RESULT_NON_REAL_ERROR)
+            val logM = log10(this.mantissa)
+            return BigVal(logM) + (this.exponent ?: BigVal(0.0))
+        }
 
     fun pow(other: BigVal): BigVal {
         if (other.mantissa == 0.0) return BigVal(1.0, null as BigVal?)
@@ -279,16 +281,18 @@ class BigVal {
         return a
     }
 
-    fun factorial(): BigVal {
-        val d = toDouble()
-        if (d < 0.0 || d > 100.0) throw IllegalArgumentException("Domain error")
-        val n = d.roundToInt()
-        var res = BigVal(1.0)
-        for (i in 2..n) {
-            res *= BigVal(i.toDouble())
+    private const val DOMAIN_ERROR = "Domain error"
+
+        fun factorial(): BigVal {
+            val d = toDouble()
+            if (d < 0.0 || d > 100.0) throw IllegalArgumentException(DOMAIN_ERROR)
+            val n = d.roundToInt()
+            var res = BigVal(1.0)
+            for (i in 2..n) {
+                res *= BigVal(i.toDouble())
+            }
+            return res
         }
-        return res
-    }
 
     fun nPr(rVal: BigVal): BigVal {
         val n = this.toDouble().roundToInt()

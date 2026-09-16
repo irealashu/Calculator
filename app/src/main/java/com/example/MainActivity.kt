@@ -626,7 +626,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vib
                                 )
                             }
                             IconButton(onClick = { showNavMenu = false }) {
-                                Icon(Icons.Default.Close, contentDescription = "Close Menu", tint = expressionTextColor)
+                                Icon(Icons.Default.Close, contentDescription = CLOSE_MENU_CONTENT_DESCRIPTION, tint = expressionTextColor)
                             }
                         }
 
@@ -774,21 +774,23 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vib
                                     }
                                     .padding(horizontal = 14.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = null,
-                                    tint = functionalTextColor,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = "2D Canvas Function Grapher",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = expressionTextColor
-                                )
-                            }
+                            private const val CANVAS_GRAPHER_TITLE = "2D Canvas Function Grapher"
+
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.PlayArrow,
+                                                                contentDescription = null,
+                                                                tint = functionalTextColor,
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(10.dp))
+                                                            Text(
+                                                                text = CANVAS_GRAPHER_TITLE,
+                                                                fontSize = 13.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = expressionTextColor
+                                                            )
+                                                        }
 
                             // Section 3: High Advanced Math Functions Quick Injectors
                             Text(
@@ -1048,8 +1050,8 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vib
                             .fillMaxSize()
                             .padding(16.dp)
                     ) {
-                        var sidebarTab by remember { mutableStateOf("HISTORY") } // "HISTORY" or "VARIABLES"
-
+                        private const val HISTORY_TAB = "HISTORY"
+                        var sidebarTab by remember { mutableStateOf(HISTORY_TAB) } // "HISTORY" or "VARIABLES"
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1089,7 +1091,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vib
                             }
 
                             Button(
-                                onClick = { sidebarTab = "VARIABLES" },
+                                onClick = { sidebarTab = SIDEBAR_TAB_VARIABLES },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (sidebarTab == "VARIABLES") operatorColor else actionColor
                                 ),
@@ -1097,7 +1099,7 @@ fun CalculatorScreen(viewModel: CalculatorViewModel = viewModel(), vibrator: Vib
                                 modifier = Modifier.weight(1.1f)
                             ) {
                                 Text(
-                                    "Variables",
+                                    VARIABLES_TAB_TITLE,
                                     fontWeight = FontWeight.Bold,
                                     color = if (sidebarTab == "VARIABLES") operatorTextColor else functionalTextColor
                                 )
@@ -2374,20 +2376,25 @@ fun ConversionDialog(
         }
     }
 
+    private const val ABR_L100KM = "L/100km"
+    private const val ABR_MPG_US = "MPG (US)"
+    private const val ABR_MPG_UK = "MPG (UK)"
+    private const val ABR_KM_PER_L = "km/L"
+
     val fuelConvert: (Double, UnitMetric, UnitMetric) -> Double = { value, from, to ->
         if (value <= 0.0) 0.0 else {
             val l100k = when (from.abbr) {
-                "L/100km" -> value
-                "MPG (US)" -> 235.214583 / value
-                "MPG (UK)" -> 282.481155 / value
-                "km/L" -> 100.0 / value
+                ABR_L100KM -> value
+                ABR_MPG_US -> 235.214583 / value
+                ABR_MPG_UK -> 282.481155 / value
+                ABR_KM_PER_L -> 100.0 / value
                 else -> value
             }
             when (to.abbr) {
-                "L/100km" -> l100k
-                "MPG (US)" -> 235.214583 / l100k
-                "MPG (UK)" -> 282.481155 / l100k
-                "km/L" -> 100.0 / l100k
+                ABR_L100KM -> l100k
+                ABR_MPG_US -> 235.214583 / l100k
+                ABR_MPG_UK -> 282.481155 / l100k
+                ABR_KM_PER_L -> 100.0 / l100k
                 else -> l100k
             }
         }
@@ -2659,57 +2666,59 @@ fun ConversionDialog(
                     UnitMetric("Millihenry", "mH", 0.001),
                     UnitMetric("Microhenry", "µH", 1e-6),
                     UnitMetric("Nanohenry", "nH", 1e-9)
-                )),
-                ConversionCategory("Magnetic Flux", listOf(
-                    UnitMetric("Weber", "Wb", 1.0),
-                    UnitMetric("Milliweber", "mWb", 0.001),
-                    UnitMetric("Microweber", "µWb", 1e-6),
-                    UnitMetric("Maxwell", "Mx", 1e-8)
-                )),
-                ConversionCategory("Magnetic Field Strength", listOf(
-                    UnitMetric("Tesla", "T", 1.0),
-                    UnitMetric("Gauss", "G", 1e-4),
-                    UnitMetric("Millitesla", "mT", 0.001),
-                    UnitMetric("Microtesla", "µT", 1e-6),
-                    UnitMetric("Gamma", "γ", 1e-9)
-                )),
-                ConversionCategory("Illuminance", listOf(
-                    UnitMetric("Lux", "lx", 1.0),
-                    UnitMetric("Foot-candle", "fc", 10.76391),
-                    UnitMetric("Phot", "ph", 10000.0)
-                )),
-                ConversionCategory("Luminance", listOf(
-                    UnitMetric("Nit (cd/m²)", "nit", 1.0),
-                    UnitMetric("Lambert", "L", 3183.09886),
-                    UnitMetric("Foot-lambert", "fL", 3.426259)
-                ))
-            ),
-            "5. Compute & Lifestyle" to listOf(
-                ConversionCategory("Data Storage (Decimal)", listOf(
-                    UnitMetric("Bit", "b", 0.125),
-                    UnitMetric("Byte", "B", 1.0),
-                    UnitMetric("Kilobyte", "KB", 1000.0),
-                    UnitMetric("Megabyte", "MB", 1e6),
-                    UnitMetric("Gigabyte", "GB", 1e9),
-                    UnitMetric("Terabyte", "TB", 1e12),
-                    UnitMetric("Petabyte", "PB", 1e15),
-                    UnitMetric("Exabyte", "EB", 1e18)
-                )),
-                ConversionCategory("Data Storage (Binary)", listOf(
-                    UnitMetric("Kibibyte", "KiB", 1024.0),
-                    UnitMetric("Mebibyte", "MiB", 1048576.0),
-                    UnitMetric("Gibibyte", "GiB", 1073741824.0),
-                    UnitMetric("Tebibyte", "TiB", 1099511627776.0),
-                    UnitMetric("Pebibyte", "PiB", 1125899906842624.0)
-                )),
-                ConversionCategory("Data Transfer Rate", listOf(
-                    UnitMetric("Bits per second", "bps", 1.0),
-                    UnitMetric("Kilobits per sec", "kbps", 1000.0),
-                    UnitMetric("Megabits per sec", "Mbps", 1e6),
-                    UnitMetric("Gigabits per sec", "Gbps", 1e9),
-                    UnitMetric("Bytes per second", "B/s", 8.0),
-                    UnitMetric("Megabytes per sec", "MB/s", 8e6)
-                )),
+            private const val COMPUTE_LIFESTYLE_CATEGORY = "5. Compute & Lifestyle"
+
+                            )),
+                            ConversionCategory("Magnetic Flux", listOf(
+                                UnitMetric("Weber", "Wb", 1.0),
+                                UnitMetric("Milliweber", "mWb", 0.001),
+                                UnitMetric("Microweber", "µWb", 1e-6),
+                                UnitMetric("Maxwell", "Mx", 1e-8)
+                            )),
+                            ConversionCategory("Magnetic Field Strength", listOf(
+                                UnitMetric("Tesla", "T", 1.0),
+                                UnitMetric("Gauss", "G", 1e-4),
+                                UnitMetric("Millitesla", "mT", 0.001),
+                                UnitMetric("Microtesla", "µT", 1e-6),
+                                UnitMetric("Gamma", "γ", 1e-9)
+                            )),
+                            ConversionCategory("Illuminance", listOf(
+                                UnitMetric("Lux", "lx", 1.0),
+                                UnitMetric("Foot-candle", "fc", 10.76391),
+                                UnitMetric("Phot", "ph", 10000.0)
+                            )),
+                            ConversionCategory("Luminance", listOf(
+                                UnitMetric("Nit (cd/m²)", "nit", 1.0),
+                                UnitMetric("Lambert", "L", 3183.09886),
+                                UnitMetric("Foot-lambert", "fL", 3.426259)
+                            ))
+                        ),
+                        COMPUTE_LIFESTYLE_CATEGORY to listOf(
+                            ConversionCategory("Data Storage (Decimal)", listOf(
+                                UnitMetric("Bit", "b", 0.125),
+                                UnitMetric("Byte", "B", 1.0),
+                                UnitMetric("Kilobyte", "KB", 1000.0),
+                                UnitMetric("Megabyte", "MB", 1e6),
+                                UnitMetric("Gigabyte", "GB", 1e9),
+                                UnitMetric("Terabyte", "TB", 1e12),
+                                UnitMetric("Petabyte", "PB", 1e15),
+                                UnitMetric("Exabyte", "EB", 1e18)
+                            )),
+                            ConversionCategory("Data Storage (Binary)", listOf(
+                                UnitMetric("Kibibyte", "KiB", 1024.0),
+                                UnitMetric("Mebibyte", "MiB", 1048576.0),
+                                UnitMetric("Gibibyte", "GiB", 1073741824.0),
+                                UnitMetric("Tebibyte", "TiB", 1099511627776.0),
+                                UnitMetric("Pebibyte", "PiB", 1125899906842624.0)
+                            )),
+                            ConversionCategory("Data Transfer Rate", listOf(
+                                UnitMetric("Bits per second", "bps", 1.0),
+                                UnitMetric("Kilobits per sec", "kbps", 1000.0),
+                                UnitMetric("Megabits per sec", "Mbps", 1e6),
+                                UnitMetric("Gigabits per sec", "Gbps", 1e9),
+                                UnitMetric("Bytes per second", "B/s", 8.0),
+                                UnitMetric("Megabytes per sec", "MB/s", 8e6)
+                            )),
                 ConversionCategory("Fuel Consumption", listOf(
                     UnitMetric("Liters per 100km", "L/100km", 1.0),
                     UnitMetric("Miles per Gallon (US)", "MPG (US)", 1.0),
@@ -2730,40 +2739,58 @@ fun ConversionDialog(
     }
 
     // Size datasets
-    val mensShoeSizes = remember {
-        listOf(
-            mapOf("US (Men)" to "6.0", "UK" to "5.0", "EU" to "39", "JP (cm)" to "24.0", "Int" to "S"),
-            mapOf("US (Men)" to "7.0", "UK" to "6.0", "EU" to "40", "JP (cm)" to "25.0", "Int" to "S"),
-            mapOf("US (Men)" to "8.0", "UK" to "7.0", "EU" to "41", "JP (cm)" to "26.0", "Int" to "M"),
-            mapOf("US (Men)" to "9.0", "UK" to "8.0", "EU" to "42", "JP (cm)" to "27.0", "Int" to "M"),
-            mapOf("US (Men)" to "10.0", "UK" to "9.0", "EU" to "43", "JP (cm)" to "28.0", "Int" to "L"),
-            mapOf("US (Men)" to "11.0", "UK" to "10.0", "EU" to "44", "JP (cm)" to "29.0", "Int" to "L"),
-            mapOf("US (Men)" to "12.0", "UK" to "11.0", "EU" to "45", "JP (cm)" to "30.0", "Int" to "XL"),
-            mapOf("US (Men)" to "13.0", "UK" to "12.0", "EU" to "46", "JP (cm)" to "31.0", "Int" to "XXL")
-        )
-    }
+    private const val KEY_US_MEN = "US (Men)"
+    private const val KEY_UK = "UK"
+    private const val KEY_EU = "EU"
+    private const val KEY_JP_CM = "JP (cm)"
+    private const val KEY_INT = "Int"
+
+        val mensShoeSizes = remember {
+            listOf(
+                mapOf(KEY_US_MEN to "6.0", KEY_UK to "5.0", KEY_EU to "39", KEY_JP_CM to "24.0", KEY_INT to "S"),
+                mapOf(KEY_US_MEN to "7.0", KEY_UK to "6.0", KEY_EU to "40", KEY_JP_CM to "25.0", KEY_INT to "S"),
+                mapOf(KEY_US_MEN to "8.0", KEY_UK to "7.0", KEY_EU to "41", KEY_JP_CM to "26.0", KEY_INT to "M"),
+                mapOf(KEY_US_MEN to "9.0", KEY_UK to "8.0", KEY_EU to "42", KEY_JP_CM to "27.0", KEY_INT to "M"),
+                mapOf(KEY_US_MEN to "10.0", KEY_UK to "9.0", KEY_EU to "43", KEY_JP_CM to "28.0", KEY_INT to "L"),
+                mapOf(KEY_US_MEN to "11.0", KEY_UK to "10.0", KEY_EU to "44", KEY_JP_CM to "29.0", KEY_INT to "L"),
+                mapOf(KEY_US_MEN to "12.0", KEY_UK to "11.0", KEY_EU to "45", KEY_JP_CM to "30.0", KEY_INT to "XL"),
+                mapOf(KEY_US_MEN to "13.0", KEY_UK to "12.0", KEY_EU to "46", KEY_JP_CM to "31.0", KEY_INT to "XXL")
+            )
+        }
+
+    private const val KEY_US_WOMEN = "US (Women)"
+    private const val KEY_UK = "UK"
+    private const val KEY_EU = "EU"
+    private const val KEY_JP_CM = "JP (cm)"
+    private const val KEY_INT = "Int"
 
     val womensShoeSizes = remember {
         listOf(
-            mapOf("US (Women)" to "5.0", "UK" to "3.0", "EU" to "35", "JP (cm)" to "21.0", "Int" to "XS"),
-            mapOf("US (Women)" to "6.0", "UK" to "4.0", "EU" to "36", "JP (cm)" to "22.0", "Int" to "S"),
-            mapOf("US (Women)" to "7.0", "UK" to "5.0", "EU" to "37", "JP (cm)" to "23.0", "Int" to "S"),
-            mapOf("US (Women)" to "8.0", "UK" to "6.0", "EU" to "38", "JP (cm)" to "24.0", "Int" to "M"),
-            mapOf("US (Women)" to "9.0", "UK" to "7.0", "EU" to "39", "JP (cm)" to "25.0", "Int" to "M"),
-            mapOf("US (Women)" to "10.0", "UK" to "8.0", "EU" to "40", "JP (cm)" to "26.0", "Int" to "L")
+            mapOf(KEY_US_WOMEN to "5.0", KEY_UK to "3.0", KEY_EU to "35", KEY_JP_CM to "21.0", KEY_INT to "XS"),
+            mapOf(KEY_US_WOMEN to "6.0", KEY_UK to "4.0", KEY_EU to "36", KEY_JP_CM to "22.0", KEY_INT to "S"),
+            mapOf(KEY_US_WOMEN to "7.0", KEY_UK to "5.0", KEY_EU to "37", KEY_JP_CM to "23.0", KEY_INT to "S"),
+            mapOf(KEY_US_WOMEN to "8.0", KEY_UK to "6.0", KEY_EU to "38", KEY_JP_CM to "24.0", KEY_INT to "M"),
+            mapOf(KEY_US_WOMEN to "9.0", KEY_UK to "7.0", KEY_EU to "39", KEY_JP_CM to "25.0", KEY_INT to "M"),
+            mapOf(KEY_US_WOMEN to "10.0", KEY_UK to "8.0", KEY_EU to "40", KEY_JP_CM to "26.0", KEY_INT to "L")
         )
     }
 
-    val unisexClothingSizes = remember {
-        listOf(
-            mapOf("Int" to "XS", "US (Chest)" to "34", "UK" to "34", "EU" to "44", "JP" to "S", "Chest (cm)" to "86"),
-            mapOf("Int" to "S", "US (Chest)" to "36", "UK" to "36", "EU" to "46", "JP" to "M", "Chest (cm)" to "91"),
-            mapOf("Int" to "M", "US (Chest)" to "38", "UK" to "38", "EU" to "48", "JP" to "L", "Chest (cm)" to "96"),
-            mapOf("Int" to "L", "US (Chest)" to "40", "UK" to "40", "EU" to "50", "JP" to "LL", "Chest (cm)" to "101"),
-            mapOf("Int" to "XL", "US (Chest)" to "42", "UK" to "42", "EU" to "52", "JP" to "3L", "Chest (cm)" to "106"),
-            mapOf("Int" to "XXL", "US (Chest)" to "44", "UK" to "44", "EU" to "54", "JP" to "4L", "Chest (cm)" to "111")
-        )
-    }
+    private const val KEY_INT = "Int"
+    private const val KEY_US_CHEST = "US (Chest)"
+    private const val KEY_UK = "UK"
+    private const val KEY_EU = "EU"
+    private const val KEY_JP = "JP"
+    private const val KEY_CHEST_CM = "Chest (cm)"
+        val unisexClothingSizes = remember {
+            listOf(
+                mapOf(KEY_INT to "XS", KEY_US_CHEST to "34", KEY_UK to "34", KEY_EU to "44", KEY_JP to "S", KEY_CHEST_CM to "86"),
+                mapOf(KEY_INT to "S", KEY_US_CHEST to "36", KEY_UK to "36", KEY_EU to "46", KEY_JP to "M", KEY_CHEST_CM to "91"),
+                mapOf(KEY_INT to "M", KEY_US_CHEST to "38", KEY_UK to "38", KEY_EU to "48", KEY_JP to "L", KEY_CHEST_CM to "96"),
+                mapOf(KEY_INT to "L", KEY_US_CHEST to "40", KEY_UK to "40", KEY_EU to "50", KEY_JP to "LL", KEY_CHEST_CM to "101"),
+                mapOf(KEY_INT to "XL", KEY_US_CHEST to "42", KEY_UK to "42", KEY_EU to "52", KEY_JP to "3L", KEY_CHEST_CM to "106"),
+                mapOf(KEY_INT to "XXL", KEY_US_CHEST to "44", KEY_UK to "44", KEY_EU to "54", KEY_JP to "4L", KEY_CHEST_CM to "111")
+            )
+        }
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedGroup by remember { mutableStateOf("1. Common & Daily") }
@@ -2773,9 +2800,22 @@ fun ConversionDialog(
 
     // Apparel states
     var isApparelMode by remember { mutableStateOf(false) }
-    var apparelType by remember { mutableStateOf("Men's Shoes") }
+    private const val DEFAULT_APPAREL_TYPE = "Men's Shoes"
+    var apparelType by remember { mutableStateOf(DEFAULT_APPAREL_TYPE) }
+    private companion object {
+        private const val UNISEX_CLOTHING = "Unisex Clothing"
+        private const val WOMENS_SHOES = "Women's Shoes"
+        private const val US_WOMEN = "US (Women)"
+        private const val US_MEN = "US (Men)"
+        private const val INT_SYSTEM = "Int"
+    }
+
     var apparelSystem by remember(apparelType) {
-        mutableStateOf(if (apparelType == "Unisex Clothing") "Int" else if (apparelType == "Women's Shoes") "US (Women)" else "US (Men)")
+        mutableStateOf(
+            if (apparelType == UNISEX_CLOTHING) INT_SYSTEM
+            else if (apparelType == WOMENS_SHOES) US_WOMEN
+            else US_MEN
+        )
     }
     val sizeOptions = remember(apparelType, apparelSystem) {
         val list = when (apparelType) {
@@ -3701,17 +3741,18 @@ fun GlobalSearchDialog(
     var query by remember { mutableStateOf("") }
     
     // Setup searchable array
+    private const val ADVANCED_WORKSHEET = "Advanced Worksheet"
     val items = remember {
         listOf(
             // Worksheets
-            SearchItem("Calculus & Limits Worksheet", "Advanced Worksheet", "Evaluate limits, derivatives, definite integrals") { onOpenWorksheet("calculus") },
-            SearchItem("Linear Algebra Studio (3x3)", "Advanced Worksheet", "Solve 3x3 matrices - det, inverse, eigenvalues") { onOpenWorksheet("linalg") },
-            SearchItem("Complex Numbers & DeMoivre", "Advanced Worksheet", "Perform complex analysis & polar calculations") { onOpenWorksheet("complex") },
-            SearchItem("Linear Regression Studio", "Advanced Worksheet", "Analyze stats and generate linear regression tables") { onOpenWorksheet("regression") },
-            SearchItem("Special Functions & Stats", "Advanced Worksheet", "Bessel functions, Gamma, normal CDF, stats analyzer") { onOpenWorksheet("special") },
-            SearchItem("Financial TVM Ledger", "Advanced Worksheet", "Financial values: PV, FV, PMT, NPV, Cashflow") { onOpenWorksheet("finance") },
-            SearchItem("Symbolic CAS Studio (Factor/Expand)", "Advanced Worksheet", "Compute symbolic factorizations and expansions") { onOpenWorksheet("cas") },
-            SearchItem("Fraction & Greater Precision Converter", "Advanced Worksheet", "Convert floats to rational fraction ratios") { onOpenWorksheet("fraction") },
+            SearchItem("Calculus & Limits Worksheet", ADVANCED_WORKSHEET, "Evaluate limits, derivatives, definite integrals") { onOpenWorksheet("calculus") },
+            SearchItem("Linear Algebra Studio (3x3)", ADVANCED_WORKSHEET, "Solve 3x3 matrices - det, inverse, eigenvalues") { onOpenWorksheet("linalg") },
+            SearchItem("Complex Numbers & DeMoivre", ADVANCED_WORKSHEET, "Perform complex analysis & polar calculations") { onOpenWorksheet("complex") },
+            SearchItem("Linear Regression Studio", ADVANCED_WORKSHEET, "Analyze stats and generate linear regression tables") { onOpenWorksheet("regression") },
+            SearchItem("Special Functions & Stats", ADVANCED_WORKSHEET, "Bessel functions, Gamma, normal CDF, stats analyzer") { onOpenWorksheet("special") },
+            SearchItem("Financial TVM Ledger", ADVANCED_WORKSHEET, "Financial values: PV, FV, PMT, NPV, Cashflow") { onOpenWorksheet("finance") },
+            SearchItem("Symbolic CAS Studio (Factor/Expand)", ADVANCED_WORKSHEET, "Compute symbolic factorizations and expansions") { onOpenWorksheet("cas") },
+            SearchItem("Fraction & Greater Precision Converter", ADVANCED_WORKSHEET, "Convert floats to rational fraction ratios") { onOpenWorksheet("fraction") },
             
             // Solvers
             SearchItem("ax² + bx + c = 0 Quadratic Solver", "Solver", "Find real or complex roots for quadratic formulas") { onOpenSolver("QUAD") },
@@ -5061,16 +5102,19 @@ fun WorksheetDialog(
 
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                             Button(
-                                onClick = {
-                                    val mat = buildMatrix()
-                                    try {
-                                        val det = mat.determinant()
-                                        resultText = "Determinant = $det"
-                                        insertValue = det.toString()
-                                    } catch (e: Exception) {
-                                        resultText = "Error: " + e.message
-                                    }
-                                },
+                                private const val DETERMINANT_PREFIX = "Determinant = "
+                                private const val ERROR_PREFIX = "Error: "
+
+                                                                onClick = {
+                                                                    val mat = buildMatrix()
+                                                                    try {
+                                                                        val det = mat.determinant()
+                                                                        resultText = "$DETERMINANT_PREFIX$det"
+                                                                        insertValue = det.toString()
+                                                                    } catch (e: Exception) {
+                                                                        resultText = ERROR_PREFIX + e.message
+                                                                    }
+                                                                },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEFF6FF)),
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -5566,15 +5610,17 @@ private fun WorksheetDialog_buildMatrix_cell(valStr: String): Double {
     return valStr.toDoubleOrNull() ?: 0.0
 }
 
+private const val CATEGORY_CORE_KEY = "Core"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HelpManualDialog(
     currentTheme: CalcTheme,
     onDismiss: () -> Unit
 ) {
-    var selectedCategory by remember { mutableStateOf("Core") }
+    var selectedCategory by remember { mutableStateOf(CATEGORY_CORE_KEY) }
     val categories = listOf(
-        "Core" to "Core Calc",
+        CATEGORY_CORE_KEY to "Core Calc",
         "Worksheets" to "Worksheets",
         "Solvers" to "Solvers & Plot",
         "Variables" to "Variables & Themes"
